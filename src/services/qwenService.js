@@ -49,32 +49,32 @@ export async function extractFuelReceiptWithQwen(imageBase64OrUrl, config = {}) 
     headers['X-Title'] = 'FuelScan Nota SPBU';
   }
 
-  const prompt = `Anda adalah asisten AI OCR ahli pembaca struk bensin / nota SPBU di Indonesia (Pertamina, Shell, BP, Vivo).
-Analisis gambar struk nota bensin ini dan kembalikan data dalam format JSON murni TANPA markdown (\`\`\`json).
+  const prompt = `Anda adalah asisten AI OCR ahli pembaca struk bensin / nota SPBU di Indonesia.
+Analisis gambar struk ini dengan SANGAT TELITI. Ekstrak data SECARA HARFIAH/PERSIS seperti yang tertulis di gambar. DILARANG KERAS mengarang/berhalusinasi. Kembalikan data dalam format JSON murni TANPA tulisan apapun selain JSON.
 
 Format JSON yang wajib dihasilkan:
 {
-  "spbuName": "Nama SPBU (cth: SPBU 34.12345 PT PERTAMINA PATRA NIAGA)",
-  "spbuCode": "Nomor kode SPBU jika ada (cth: 34.123.45)",
+  "spbuName": "Salin NAMA SPBU atau Lokasi persis seperti di bagian atas struk (cth: SPBU SUKODONO, SPBU 34.12345)",
+  "spbuCode": "Nomor kode SPBU jika ada (cth: 34.123.45, kosongkan jika tidak ada)",
   "fuelType": "Jenis BBM (cth: Pertalite (RON 90), Pertamax (RON 92), Pertamax Turbo (RON 98), Dexlite, Pertamina Dex, Shell Super, Shell V-Power, BP 92, Biosolar)",
   "fuelBrand": "Pertamina / Shell / BP / Vivo",
   "volumeLiters": 25.00,
   "pricePerLiter": 12950,
   "totalPrice": 323750,
   "paymentMethod": "Tunai (Cash) / QRIS / MyPertamina / Kartu Debit / Kartu Kredit",
-  "date": "YYYY-MM-DD",
-  "time": "HH:MM",
-  "pumpNo": "Nomor Pompa",
-  "nozzleNo": "Nomor Nozzle/Selang",
-  "receiptNo": "Nomor Transaksi / Struk",
-  "rawTextSummary": "Ringkasan teks struk"
+  "date": "Ekstrak tanggal, format wajib YYYY-MM-DD (contoh: 2026-09-22)",
+  "time": "Ekstrak jam pengisian (contoh: 06:03)",
+  "pumpNo": "Salin Angka/Nomor Pompa / Pulau Pompa",
+  "nozzleNo": "Salin Angka/Nomor Nozzle/Selang (kosongkan jika tidak ada)",
+  "receiptNo": "Salin Nomor Struk / No. Trans persis seperti gambar",
+  "rawTextSummary": "Ketik ulang secara berurut baris teks penting di struk, agar mudah diverifikasi"
 }
 
 Perhatian:
-- volumeLiters wajib bertipe float (angka).
-- pricePerLiter dan totalPrice wajib bertipe integer (angka murni tanpa titik/koma ribuan).
-- Jika ada nilai yang tidak terbaca, gunakan estimasi wajar (totalPrice = volumeLiters * pricePerLiter).
-- Hanya kembalikan string JSON valid.`;
+- volumeLiters: float (contoh: 3.13)
+- pricePerLiter dan totalPrice: integer (contoh: 15950)
+- Jika tidak terbaca, kembalikan null atau 0.
+- Keluarkan HANYA string JSON yang valid, tanpa awalan pesan seperti 'Berikut adalah JSON...'.`;
 
   const requestBody = {
     model: model,
@@ -115,14 +115,12 @@ Perhatian:
   }
 
   try {
-    // Clean potential markdown blocks
-    const cleaned = textResponse
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```$/i, '')
-      .trim();
-
-    const parsed = JSON.parse(cleaned);
+    // Robust JSON extraction matching { to } in case AI prepends markdown/text
+    const match = textResponse.match(/\{[\s\S]*\}/);
+    if (!match) {
+      throw new Error("Tidak menemukan blok JSON");
+    }
+    const parsed = JSON.parse(match[0]);
     parsed.ocrConfidence = 99;
     parsed.engine = `Qwen AI (${model.split('/')[1] || model})`;
 

@@ -61,9 +61,9 @@ export async function preprocessReceiptImage(imageSource, options = { contrast: 
         // Step 2: Unsharp Mask / Sharpening Convolution (Essential for 720p blurry text)
         if (options.sharpen) {
           const sharpenKernel = [
-             0, -1,  0,
-            -1,  5, -1,
-             0, -1,  0
+            0, -1, 0,
+            -1, 5, -1,
+            0, -1, 0
           ];
 
           for (let y = 1; y < height - 1; y++) {
@@ -116,20 +116,20 @@ export async function preprocessReceiptImage(imageSource, options = { contrast: 
 /**
  * Perform Client-side Tesseract OCR on receipt image
  */
-export async function performReceiptOCR(imageInput, onProgress = () => {}, customOptions = {}) {
+export async function performReceiptOCR(imageInput, onProgress = () => { }, customOptions = {}) {
   try {
     onProgress({ status: 'Memulai mesin OCR...', progress: 0.1 });
 
     // Step 1: Preprocessing & 720p Super-Sharpening
-    onProgress({ status: 'Meningkatkan resolusi & ketajaman huruf 720p...', progress: 0.25 });
+    onProgress({ status: 'Meningkatkan resolusi ringan...', progress: 0.25 });
     let preprocessedUrl;
     try {
-      preprocessedUrl = await preprocessReceiptImage(imageInput, { 
-        contrast: customOptions.contrast ?? 40, 
-        brightness: customOptions.brightness ?? 10, 
-        sharpen: true,
+      preprocessedUrl = await preprocessReceiptImage(imageInput, {
+        contrast: customOptions.contrast ?? 0,
+        brightness: customOptions.brightness ?? 0,
+        sharpen: false,
         upscaleLowRes: true,
-        binarize: customOptions.binarize ?? false 
+        binarize: false
       });
     } catch (e) {
       console.warn('Preprocessing fallback:', e);

@@ -146,6 +146,7 @@ async function handleStartOcr() {
       } catch (qwenErr) {
         console.warn('Qwen AI failed, falling back to Local OCR:', qwenErr);
         scanProgress.value = { status: 'Qwen AI terkendala, beralih ke OCR Lokal Tesseract...', progress: 0.5 };
+        rawOcrText.value = `[CATATAN: Qwen AI gagal (${qwenErr.message}). Menggunakan OCR Lokal]`;
       }
     }
 
@@ -166,8 +167,11 @@ async function handleStartOcr() {
           scanSuccess = true;
         }
       } catch (geminiErr) {
-        console.warn('Gemini AI failed, falling back to Local OCR:', geminiErr);
-        scanProgress.value = { status: 'Gemini AI terkendala, beralih ke OCR Lokal Tesseract...', progress: 0.5 };
+        console.error('Gemini Error:', geminiErr);
+        alert('Gagal menggunakan Gemini AI! (Error: ' + geminiErr.message + '). Silakan cek API Key Anda atau coba Tesseract.');
+        scanProgress.value = { status: 'Gagal memproses dengan Gemini AI', progress: 0 };
+        isScanning.value = false;
+        return; // DONT fall back. Force user to see failure.
       }
     }
 

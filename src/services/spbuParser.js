@@ -13,13 +13,13 @@ export const FUEL_TYPES = [
   { name: 'Dexlite (CN 51)', category: 'Diesel', brand: 'Pertamina', defaultPrice: 14550, color: '#06b6d4' },
   { name: 'Pertamina Dex (CN 53)', category: 'Diesel', brand: 'Pertamina', defaultPrice: 15100, color: '#6366f1' },
   { name: 'Bio Solar / Solar Subsidi', category: 'Diesel', brand: 'Pertamina', defaultPrice: 6800, color: '#84cc16' },
-  
+
   // Shell
   { name: 'Shell Super (RON 92)', category: 'Gasoline', brand: 'Shell', defaultPrice: 13250, color: '#eab308' },
   { name: 'Shell V-Power (RON 95)', category: 'Gasoline', brand: 'Shell', defaultPrice: 14200, color: '#dc2626' },
   { name: 'Shell V-Power Nitro+ (RON 98)', category: 'Gasoline', brand: 'Shell', defaultPrice: 14450, color: '#b91c1c' },
   { name: 'Shell V-Power Diesel', category: 'Diesel', brand: 'Shell', defaultPrice: 15300, color: '#d97706' },
-  
+
   // BP-AKR
   { name: 'BP 92 (RON 92)', category: 'Gasoline', brand: 'BP', defaultPrice: 13000, color: '#22c55e' },
   { name: 'BP Ultimate (RON 95)', category: 'Gasoline', brand: 'BP', defaultPrice: 14200, color: '#16a34a' },
@@ -67,7 +67,7 @@ export function parseFuelReceiptText(rawText) {
 
   // 1. Detect SPBU Brand & Name
   const pertaminaMatch = cleanText.match(/(?:SPBU\s*(?:NO\.?)?\s*([0-9]{2}[\.\-][0-9]{3}[\.\-][0-9]{2,3}|[0-9]{2}[\.\-][0-9]{5}|[0-9]{6,8}))/i) ||
-                         cleanText.match(/(?:PERTAMINA|PATRA\s*NIAGA|PASTI\s*PAS)/i);
+    cleanText.match(/(?:PERTAMINA|PATRA\s*NIAGA|PASTI\s*PAS)/i);
   const shellMatch = cleanText.match(/(?:SHELL\s*([A-Z0-9\s]+))/i) || cleanText.includes('SHELL');
   const bpMatch = cleanText.match(/(?:BP(?:\-AKR)?\s*([A-Z0-9\s]+))/i) || cleanText.includes('BP-AKR') || cleanText.includes('BP 92');
   const vivoMatch = cleanText.match(/(?:VIVO\s*([A-Z0-9\s]+))/i) || cleanText.includes('REVVO') || cleanText.includes('VIVO');
@@ -185,8 +185,8 @@ export function parseFuelReceiptText(rawText) {
 
   // 4. Extract Price Per Liter (Harga / Liter)
   const pricePerLiterPatterns = [
-    /(?:HARGA[\s\/]*LITER|HARGA[\s\/]*L|PRICE[\s\/]*L|HARGA\/LTR|@[\s]*RP\.?)[\s:=]*([0-9]{1,2}[\.,][0-9]{3})/i,
-    /(?:RP\.?[\s]*)([0-9]{1,2}[\.,][0-9]{3})\s*[\/]\s*(?:L|LTR|LITER)/i,
+    /(?:HARGA[\s\/]*LITER|HARGA[\s\/]*L|PRICE[\s\/]*L|HARGA\/LTR)[^\d]*([0-9]{1,2}[\.,][0-9]{3})/i,
+    /(?:RP\.?[\s]*)?([0-9]{1,2}[\.,][0-9]{3})\s*[\/]\s*(?:L|LTR|LITER)/i,
     /@[\s]*([0-9]{1,2}[\.,][0-9]{3})/i
   ];
 
@@ -211,7 +211,8 @@ export function parseFuelReceiptText(rawText) {
 
   // 5. Extract Volume (Liter / Vol / Qty)
   const volumePatterns = [
-    /(?:VOLUME|LITER|QTY|JUMLAH\s*LITER|VOL)[\s:=]+([0-9]{1,3}[,\.][0-9]{2,3})/i,
+    /(?:VOLUME|LITER|QTY|JUMLAH\s*LITER|VOL)[\s:=]*(?:\(L\)|L)?\s*([0-9]{1,3}[,\.][0-9]{2,3})/i,
+    /(?:VOLUME|LITER|VOL)[^\d]*([0-9]{1,3}[,\.][0-9]{2,3})/i,
     /([0-9]{1,3}[,\.][0-9]{2,3})\s*(?:L|LTR|LITER)\b/i,
     /(?:VOL|LITER)[\s]*([0-9]{1,3}[,\.][0-9]{2})/i
   ];
@@ -245,7 +246,7 @@ export function parseFuelReceiptText(rawText) {
 
   // 6. Extract Date & Time
   const dateMatch = normalizedRaw.match(/([0-3]?[0-9][\/\-\.][0-1]?[0-9][\/\-\.](?:20)?[0-9]{2})/i) ||
-                    normalizedRaw.match(/(?:20[0-9]{2}[\/\-\.][0-1]?[0-9][\/\-\.][0-3]?[0-9])/i);
+    normalizedRaw.match(/(?:20[0-9]{2}[\/\-\.][0-1]?[0-9][\/\-\.][0-3]?[0-9])/i);
   if (dateMatch) {
     result.date = normalizeDate(dateMatch[1]);
   } else {
