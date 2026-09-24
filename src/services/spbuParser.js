@@ -152,7 +152,7 @@ export function parseFuelReceiptText(rawText) {
 
   // 3. Extract Total Price (Total Rp / Total Bayar / Grand Total / Largest realistic Currency)
   const totalPatterns = [
-    /(?:TOTAL[\s\-_]*RUPIAH|TOTAL[\s\-_]*BAYAR|TOTAL[\s\-_]*RP|TOTAL[\s\-_]*PENJUALAN|GRAND[\s\-_]*TOTAL|JUMLAH[\s\-_]*RP)[\s:=]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+)/i,
+    /(?:TOTAL[\s\-_]*HARGA|TOTAL[\s\-_]*RUPIAH|TOTAL[\s\-_]*BAYAR|TOTAL[\s\-_]*RP|TOTAL[\s\-_]*PENJUALAN|GRAND[\s\-_]*TOTAL|JUMLAH[\s\-_]*RP)[\s:=]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+)/i,
     /(?:TOTAL)[\s:=]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+)/i,
     /(?:BAYAR|TUNAI|CASH|QRIS)[\s:=]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+)/i,
     /RP\.?\s*([0-9]{2,3}[\.,][0-9]{3})/i
@@ -185,7 +185,7 @@ export function parseFuelReceiptText(rawText) {
 
   // 4. Extract Price Per Liter (Harga / Liter)
   const pricePerLiterPatterns = [
-    /(?:HARGA[\s\/]*LITER|HARGA[\s\/]*L|PRICE[\s\/]*L|HARGA\/LTR)[^\d]*([0-9]{1,2}[\.,][0-9]{3})/i,
+    /(?:HARGA[A-Za-z\s\/]*LITER|HARGA[A-Za-z\s\/]*L|PRICE[A-Za-z\s\/]*L|HARGA\/LTR|HRG\/LITER)[^\d]*([0-9]{1,2}[\.,][0-9]{3})/i,
     /(?:RP\.?[\s]*)?([0-9]{1,2}[\.,][0-9]{3})\s*[\/]\s*(?:L|LTR|LITER)/i,
     /@[\s]*([0-9]{1,2}[\.,][0-9]{3})/i
   ];
@@ -211,7 +211,7 @@ export function parseFuelReceiptText(rawText) {
 
   // 5. Extract Volume (Liter / Vol / Qty)
   const volumePatterns = [
-    /(?:VOLUME|LITER|QTY|JUMLAH\s*LITER|VOL)[\s:=]*(?:\(L\)|L)?\s*([0-9]{1,3}[,\.][0-9]{2,3})/i,
+    /(?:VOLUME[A-Za-z\s]*|LITER|QTY|JUMLAH\s*LITER|VOL)[\s:=]*(?:[\(\[]?[Ll1I][\)\]]?)?\s*([0-9]{1,3}[,\.][0-9]{2,3})/i,
     /(?:VOLUME|LITER|VOL)[^\d]*([0-9]{1,3}[,\.][0-9]{2,3})/i,
     /([0-9]{1,3}[,\.][0-9]{2,3})\s*(?:L|LTR|LITER)\b/i,
     /(?:VOL|LITER)[\s]*([0-9]{1,3}[,\.][0-9]{2})/i
@@ -262,7 +262,7 @@ export function parseFuelReceiptText(rawText) {
   }
 
   // 7. Extract Pump & Receipt No
-  const pumpMatch = normalizedRaw.match(/(?:POMPA|PUMP|NOZZLE|SELANG)[\s:=#]*([0-9]{1,2})/i);
+  const pumpMatch = normalizedRaw.match(/(?:PULAU[A-Za-z\s\/]*POMPA|POMPA|PUMP|NOZZLE|SELANG)[\s:=#]*([0-9lLiIoO]{1,2})/i);
   if (pumpMatch) {
     result.pumpNo = pumpMatch[1].padStart(2, '0');
     result.nozzleNo = '01';
@@ -296,13 +296,15 @@ export function parseFuelReceiptText(rawText) {
 
 function parseIndonesianFloat(str) {
   if (!str) return 0;
-  const clean = str.replace(/\s/g, '').replace(',', '.');
+  let clean = str.toUpperCase().replace(/[OQ]/g, '0').replace(/[ILl]/g, '1').replace(/S/g, '5').replace(/B/g, '8');
+  clean = clean.replace(/\s/g, '').replace(',', '.');
   return parseFloat(clean) || 0;
 }
 
 function parseIndonesianCurrency(str) {
   if (!str) return 0;
-  const clean = str.replace(/[^\d]/g, '');
+  let clean = str.toUpperCase().replace(/[OQ]/g, '0').replace(/[ILl]/g, '1').replace(/S/g, '5').replace(/B/g, '8');
+  clean = clean.replace(/[^\d]/g, '');
   return parseInt(clean, 10) || 0;
 }
 
@@ -346,3 +348,5 @@ function createEmptyResult() {
     confidence: 60
   };
 }
+
+
