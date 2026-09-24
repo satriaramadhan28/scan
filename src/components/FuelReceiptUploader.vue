@@ -36,7 +36,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['image-selected', 'start-ocr', 'use-sample']);
+const emit = defineEmits(['image-selected', 'start-ocr', 'use-sample', 'raw-image-selected']);
 
 const fileInputRef = ref(null);
 const nativeCameraInputRef = ref(null);
@@ -98,6 +98,9 @@ function setImage(imgUrl) {
   previewImage.value = imgUrl;
   rotation.value = 0;
   emit('image-selected', imgUrl);
+  // Foto asli (belum difilter) dipakai oleh mesin AI karena jauh lebih akurat
+  // daripada gambar yang sudah dipertajam manual.
+  emit('raw-image-selected', imgUrl);
 }
 
 // Camera Support with Highest Resolution Request & Zoom
@@ -289,12 +292,14 @@ function resetFilters() {
   rotation.value = 0;
   previewImage.value = originalImage.value;
   emit('image-selected', originalImage.value);
+  emit('raw-image-selected', originalImage.value);
 }
 
 function clearImage() {
   originalImage.value = null;
   previewImage.value = null;
   rotation.value = 0;
+  emit('raw-image-selected', null);
   if (fileInputRef.value) fileInputRef.value.value = '';
   if (nativeCameraInputRef.value) nativeCameraInputRef.value.value = '';
 }

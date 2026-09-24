@@ -17,6 +17,7 @@ import {
   UserPlus
 } from 'lucide-vue-next';
 import { FUEL_TYPES } from '../services/spbuParser.js';
+import { getFuelPriceList, compareToOfficialPrice, verifyReceiptTotal, FUEL_PRICE_UPDATED_AT, FUEL_PRICE_REGION, PRICE_TOLERANCE_PERCENT } from '../services/fuelPrices.js';
 import { formatRupiah, formatNumber } from '../services/pdfExportService.js';
 import confetti from 'canvas-confetti';
 
@@ -41,17 +42,122 @@ const form = ref({ ...props.formData });
 const copied = ref(false);
 const saveFeedback = ref(false);
 
+const fuelList = ref(getFuelPriceList());
+
+// Tanggal berlaku harga (format ramah baca, mis. "2 Sep 2026")
+const priceUpdatedLabel = computed(() => {
+  const d = new Date(FUEL_PRICE_UPDATED_AT);
+  if (Number.isNaN(d.getTime())) return FUEL_PRICE_UPDATED_AT;
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+});
+
+const activeFuel = computed(() => fuelList.value.find(f => f.name === form.value.fuelType) || null);
+
+// Harga nota vs harga resmi
+const priceCheck = computed(() => compareToOfficialPrice(form.value.fuelType, form.value.pricePerLiter));
+
+// volume x harga harus sama dengan total
+const totalCheck = computed(() => verifyReceiptTotal({
+  volumeLiters: form.value.volumeLiters,
+  pricePerLiter: form.value.pricePerLiter,
+  totalPrice: form.value.totalPrice
+}));
+
+const isSubsidizedFuel = computed(() => !!activeFuel.value?.subsidized);
+const isUnavailableFuel = computed(() => !!activeFuel.value?.unavailable);
+const showReviewBanner = computed(() => form.value.needsReview || priceCheck.value.status === 'warn' || totalCheck.value.status === 'warn');
+
+// --- Format angka gaya Indonesia (4,60 bukan 4.6) ---
+// Input HTML type="number" selalu memaksa titik desimal, jadi volume ditampilkan
+// lewat input teks agar nota kembali tampil persis seperti yang tercetak: 4,60.
+const volumeText = ref(formatVolumeInput(form.value.volumeLiters));
+
+function formatVolumeInput(value) {
+  const num = Number(value);
+  if (!num) return '';
+  return num.toFixed(2).replace('.', ',');
+}
+
+/** Ubah "4,60" -> 4.6 lalu sinkronkan ke total & induk */
+function commitVolume() {
+  const num = parseFloat(String(volumeText.value).replace(/[^0-9,.]/g, '').replace(',', '.')) || 0;
+  form.value.volumeLiters = parseFloat(num.toFixed(2));
+  volumeText.value = num ? formatVolumeInput(num) : '';
+  onVolumeChange();
+}
+
+/** Tampilkan angka rupiah dengan pemisah ribuan gaya Indonesia */
+function formatRupiahInput(value) {
+  const num = Number(value);
+  return num ? num.toLocaleString('id-ID') : '';
+}
+
+function parseRupiahInput(text) {
+  return parseInt(String(text).replace(/[^0-9]/g, ''), 10) || 0;
+}
+
+// Harga per liter & total ditampilkan pakai pemisah ribuan Indonesia (15.950 / 46.000)
+const priceText = ref(formatRupiahInput(form.value.pricePerLiter));
+const totalText = ref(formatRupiahInput(form.value.totalPrice));
+
+function commitPrice() {
+  const num = parseRupiahInput(priceText.value);
+  form.value.pricePerLiter = num;
+  priceText.value = formatRupiahInput(num);
+  onPricePerLiterChange();
+}
+
+function commitTotal() {
+  const num = parseRupiahInput(totalText.value);
+  form.value.totalPrice = num;
+  totalText.value = formatRupiahInput(num);
+  onTotalChange();
+}
+
+/** Selaraskan seluruh isian teks setelah nilai form berubah (hasil scan / hitungan) */
+function syncTextInputs() {
+  volumeText.value = formatVolumeInput(form.value.volumeLiters);
+  priceText.value = formatRupiahInput(form.value.pricePerLiter);
+  totalText.value = formatRupiahInput(form.value.totalPrice);
+}
+
+// Salinan lokal form. Saat ada hasil pemindaian nota baru dari induk, isian form
+// WAJIB ikut berubah (termasuk volume & harga/liter), jadi penanda hasil scan
+// dibandingkan dulu sebelum menimpa — supaya ketikan pengguna tidak tertimpa
+// tanpa sengaja saat nilainya sama.
+let lastSyncedSignature = '';
+
+function scanSignature(data) {
+  return [
+    data?.fuelType, data?.volumeLiters, data?.pricePerLiter,
+    data?.totalPrice, data?.receiptNo, data?.date, data?.time
+  ].join('|');
+}
+
 watch(() => props.formData, (newVal) => {
-  form.value = { ...newVal };
+  if (!newVal) return;
+  const signature = scanSignature(newVal);
+  // Kalau induk mengirim hasil scan yang baru, salin apa adanya (timpa form).
+  // Kalau hanya pantulan dari perubahan yang kita kirim sendiri, jangan timpa
+  // supaya pengguna tetap bisa mengetik bebas.
+  if (signature !== lastSyncedSignature) {
+    lastSyncedSignature = signature;
+    form.value = { ...newVal };
+    volumeText.value = formatVolumeInput(newVal.volumeLiters);
+    priceText.value = formatRupiahInput(newVal.pricePerLiter);
+    totalText.value = formatRupiahInput(newVal.totalPrice);
+  }
 }, { deep: true });
 
-// Auto-sync Total = Liters * PricePerLiter
+// Auto-sync Total = Volume x HargaPerLiter (hanya saat pengguna mengubah manual)
 function onVolumeChange() {
   const vol = Number(form.value.volumeLiters) || 0;
   const price = Number(form.value.pricePerLiter) || 0;
   if (vol > 0 && price > 0) {
     form.value.totalPrice = Math.round(vol * price);
   }
+  totalText.value = formatRupiahInput(form.value.totalPrice);
+  clearReviewedFlag();
   emitChange();
 }
 
@@ -61,6 +167,8 @@ function onPricePerLiterChange() {
   if (vol > 0 && price > 0) {
     form.value.totalPrice = Math.round(vol * price);
   }
+  totalText.value = formatRupiahInput(form.value.totalPrice);
+  clearReviewedFlag();
   emitChange();
 }
 
@@ -70,7 +178,16 @@ function onTotalChange() {
   if (tot > 0 && price > 0) {
     form.value.volumeLiters = parseFloat((tot / price).toFixed(2));
   }
+  clearReviewedFlag();
   emitChange();
+}
+
+/** Hilangkan tanda "perlu diperiksa" begitu pengguna sudah merapikan form sendiri */
+function clearReviewedFlag() {
+  if (form.value.needsReview && form.value.totalPrice && form.value.volumeLiters && form.value.pricePerLiter) {
+    form.value.needsReview = false;
+    form.value.reviewFields = [];
+  }
 }
 
 function selectUser(user) {
@@ -82,11 +199,28 @@ function selectUser(user) {
 function selectFuelType(fuel) {
   form.value.fuelType = fuel.name;
   form.value.fuelBrand = fuel.brand;
-  form.value.pricePerLiter = fuel.defaultPrice;
+  // Prefill harga dari daftar harga resmi; hasil pembacaan nota tetap jadi acuan
+  // selama pengguna belum mengganti jenis BBM secara manual.
+  form.value.pricePerLiter = fuel.price;
+  priceText.value = formatRupiahInput(fuel.price);
   onPricePerLiterChange();
 }
 
+/** Saat jenis BBM diganti lewat dropdown, harga per liter ikut disesuaikan */
+function onFuelTypeSelectChange() {
+  const found = fuelList.value.find(f => f.name === form.value.fuelType);
+  if (found) {
+    form.value.fuelBrand = found.brand;
+    form.value.pricePerLiter = found.price;
+    priceText.value = formatRupiahInput(found.price);
+    onPricePerLiterChange();
+  } else {
+    emitChange();
+  }
+}
+
 function emitChange() {
+  lastSyncedSignature = scanSignature(form.value);
   emit('update-data', form.value);
 }
 
@@ -140,13 +274,50 @@ const fuelBadgeColor = computed(() => {
           <p class="form-subtitle">Periksa atau edit informasi yang diekstrak dari struk</p>
         </div>
       </div>
-      
+
       <div class="header-badges">
+        <button class="price-date-badge" :title="`Harga BBM acuan: ${FUEL_PRICE_REGION}. Berlaku sejak ${priceUpdatedLabel}. Ubah di menu Pengaturan.`" @click="$emit('open-api-modal')">
+          <Sparkles :size="12" />
+          Harga BBM {{ priceUpdatedLabel }}
+        </button>
         <span v-if="form.ocrConfidence" class="confidence-badge">
           <Sparkles :size="13" />
           Akurasi {{ form.ocrConfidence }}%
         </span>
       </div>
+    </div>
+
+    <!-- Peringatan Data Perlu Diperiksa -->
+    <div v-if="showReviewBanner" class="review-banner">
+      <div class="review-title">⚠️ Ada data yang perlu diperiksa</div>
+      <ul class="review-list">
+        <li v-if="form.needsReview && form.reviewFields?.length">
+          Tidak terbaca dari nota: <strong>{{ (form.reviewFields || []).join(', ') }}</strong>. Isi manual — sistem sengaja tidak mengisi angka apa pun agar laporan tidak salah.
+        </li>
+        <li v-else-if="form.needsReview">
+          Sebagian data nota tidak terbaca jelas.
+        </li>
+        <li v-if="priceCheck.status === 'warn'">
+          Harga nota <strong>{{ formatRupiah(priceCheck.note) }}</strong>/L berbeda
+          {{ priceCheck.percent }}% dari harga resmi
+          <strong>{{ formatRupiah(priceCheck.official) }}</strong>/L. Pastikan nota & jenis BBM sudah benar.
+        </li>
+        <li v-if="totalCheck.status === 'warn'">
+          {{ formatNumber(form.volumeLiters) }} L × {{ formatRupiah(form.pricePerLiter) }} =
+          <strong>{{ formatRupiah(totalCheck.expectedTotal) }}</strong>, sedangkan total tertulis
+          <strong>{{ formatRupiah(form.totalPrice) }}</strong> (selisih {{ formatRupiah(totalCheck.diff) }}).
+        </li>
+      </ul>
+    </div>
+
+    <!-- Informasi Ketersediaan / Subsidi -->
+    <div v-if="isUnavailableFuel" class="fuel-note warn">
+      ⛽ <strong>{{ form.fuelType }}</strong> tercatat <strong>belum tersedia</strong> di SPBU sejak awal 2026.
+      Harga di bawah hanya harga terakhir yang dipasang. Pastikan nota benar-benar produk ini.
+    </div>
+    <div v-else-if="isSubsidizedFuel" class="fuel-note ok">
+      🟢 <strong>{{ form.fuelType }}</strong> adalah BBM subsidi — harganya tetap
+      {{ formatRupiah(activeFuel?.price) }}/L di seluruh Indonesia.
     </div>
 
     <!-- Pilihan Nama Pengguna / Driver -->
@@ -163,8 +334,8 @@ const fuelBadgeColor = computed(() => {
       </div>
 
       <div class="driver-chips">
-        <button 
-          v-for="u in users" 
+        <button
+          v-for="u in users"
           :key="u.id"
           class="driver-chip"
           :class="{ active: form.employeeName === u.name }"
@@ -187,11 +358,12 @@ const fuelBadgeColor = computed(() => {
     <div class="quick-fuels">
       <span class="quick-label">Pilihan Cepat BBM:</span>
       <div class="fuel-chips-scroll">
-        <button 
-          v-for="fuel in FUEL_TYPES.slice(0, 7)" 
+        <button
+          v-for="fuel in fuelList.slice(0, 8)"
           :key="fuel.name"
           class="fuel-chip"
-          :class="{ active: form.fuelType === fuel.name }"
+          :class="{ active: form.fuelType === fuel.name, unavailable: fuel.unavailable }"
+          :title="`Rp ${fuel.price.toLocaleString('id-ID')}/L${fuel.unavailable ? ' (belum tersedia)' : ''}`"
           @click="selectFuelType(fuel)"
         >
           <span class="dot" :style="{ backgroundColor: fuel.color }"></span>
@@ -207,9 +379,9 @@ const fuelBadgeColor = computed(() => {
         <label class="form-label">
           <User :size="15" /> Nama Pengguna / Pengemudi
         </label>
-        <input 
-          type="text" 
-          v-model="form.employeeName" 
+        <input
+          type="text"
+          v-model="form.employeeName"
           placeholder="Cth: Budi Santoso"
           class="form-input"
           @input="emitChange"
@@ -220,9 +392,9 @@ const fuelBadgeColor = computed(() => {
         <label class="form-label">
           <Building2 :size="15" /> Nama / Lokasi SPBU
         </label>
-        <input 
-          type="text" 
-          v-model="form.spbuName" 
+        <input
+          type="text"
+          v-model="form.spbuName"
           placeholder="Cth: SPBU 34.12345 TB Simatupang"
           class="form-input"
           @input="emitChange"
@@ -234,15 +406,19 @@ const fuelBadgeColor = computed(() => {
         <label class="form-label">
           <Fuel :size="15" /> Jenis Bahan Bakar (BBM)
         </label>
-        <select 
-          v-model="form.fuelType" 
+        <select
+          v-model="form.fuelType"
           class="form-select"
-          @change="emitChange"
+          @change="onFuelTypeSelectChange"
         >
-          <option v-for="fuel in FUEL_TYPES" :key="fuel.name" :value="fuel.name">
-            {{ fuel.name }} (Rp {{ fuel.defaultPrice.toLocaleString('id-ID') }}/L)
+          <option v-for="fuel in fuelList" :key="fuel.name" :value="fuel.name">
+            {{ fuel.name }} — Rp {{ fuel.price.toLocaleString('id-ID') }}/L{{ fuel.unavailable ? ' (belum tersedia)' : '' }}{{ fuel.isOverridden ? ' *' : '' }}
           </option>
         </select>
+        <p class="field-hint">
+          Harga acuan resmi per {{ priceUpdatedLabel }} ({{ FUEL_PRICE_REGION }}).
+          <button class="link-btn" @click="$emit('open-api-modal')">Ubah harga</button>
+        </p>
       </div>
 
       <!-- Payment Method -->
@@ -250,8 +426,8 @@ const fuelBadgeColor = computed(() => {
         <label class="form-label">
           <CreditCard :size="15" /> Metode Pembayaran
         </label>
-        <select 
-          v-model="form.paymentMethod" 
+        <select
+          v-model="form.paymentMethod"
           class="form-select"
           @change="emitChange"
         >
@@ -269,16 +445,20 @@ const fuelBadgeColor = computed(() => {
           Volume Pengisian (Liter)
         </label>
         <div class="input-with-addon">
-          <input 
-            type="number" 
-            step="0.01"
-            v-model.number="form.volumeLiters" 
-            placeholder="0.00"
+          <input
+            type="text"
+            inputmode="decimal"
+            v-model="volumeText"
+            placeholder="0,00"
             class="form-input form-input-mono"
-            @input="onVolumeChange"
+            @blur="commitVolume"
+            @keyup.enter="commitVolume"
           />
           <span class="addon">Ltr</span>
         </div>
+        <p v-if="form.derivedFields?.includes('volumeLiters')" class="field-hint">
+          Dihitung dari nota: total ÷ harga per liter.
+        </p>
       </div>
 
       <!-- Price Per Liter -->
@@ -288,15 +468,22 @@ const fuelBadgeColor = computed(() => {
         </label>
         <div class="input-with-addon">
           <span class="addon-prefix">Rp</span>
-          <input 
-            type="number" 
-            step="50"
-            v-model.number="form.pricePerLiter" 
-            placeholder="12950"
+          <input
+            type="text"
+            inputmode="numeric"
+            v-model="priceText"
+            :placeholder="formatRupiahInput(activeFuel?.price || 15950)"
             class="form-input form-input-mono"
-            @input="onPricePerLiterChange"
+            @blur="commitPrice"
+            @keyup.enter="commitPrice"
           />
         </div>
+        <p v-if="activeFuel" class="field-hint" :class="{ 'hint-warn': priceCheck.status === 'warn' }">
+          Harga resmi {{ activeFuel.name.split(' (')[0] }}:
+          <strong>{{ formatRupiah(activeFuel.price) }}/L</strong>
+          <template v-if="priceCheck.status === 'ok'"> · nota sesuai harga resmi</template>
+          <template v-else-if="priceCheck.status === 'warn'"> · selisih {{ formatRupiah(Math.abs(priceCheck.diff)) }} ({{ priceCheck.percent }}%)</template>
+        </p>
       </div>
 
       <!-- Total Price (Highlighted Hero Input) -->
@@ -307,11 +494,14 @@ const fuelBadgeColor = computed(() => {
         </div>
         <div class="total-input-wrapper">
           <span class="total-rp">Rp</span>
-          <input 
-            type="number" 
-            v-model.number="form.totalPrice" 
+          <input
+            type="text"
+            inputmode="numeric"
+            v-model="totalText"
+            placeholder="0"
             class="total-input form-input-mono"
-            @input="onTotalChange"
+            @blur="commitTotal"
+            @keyup.enter="commitTotal"
           />
         </div>
       </div>
@@ -447,6 +637,119 @@ const fuelBadgeColor = computed(() => {
   font-size: 0.75rem;
   font-weight: 700;
   font-family: var(--font-mono);
+}
+
+.header-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Badge tanggal berlaku harga BBM (klik untuk ubah harga) */
+.price-date-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.price-date-badge:hover {
+  background: rgba(56, 189, 248, 0.22);
+  color: #bae6fd;
+}
+
+/* Banner data perlu diperiksa */
+.review-banner {
+  background: rgba(251, 191, 36, 0.09);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.review-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #fcd34d;
+  margin-bottom: 6px;
+}
+
+.review-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.review-list li {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #fde68a;
+}
+
+.review-list strong {
+  color: #fff;
+}
+
+/* Catatan ketersediaan / subsidi BBM */
+.fuel-note {
+  font-size: 0.77rem;
+  line-height: 1.45;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.fuel-note.warn {
+  background: rgba(251, 113, 133, 0.1);
+  border: 1px solid rgba(251, 113, 133, 0.3);
+  color: #fecdd3;
+}
+
+.fuel-note.ok {
+  background: rgba(16, 185, 129, 0.09);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #a7f3d0;
+}
+
+.field-hint {
+  margin-top: 5px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.field-hint strong {
+  color: #a7f3d0;
+}
+
+.field-hint.hint-warn strong {
+  color: #fcd34d;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  color: var(--accent-emerald);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Chip BBM yang belum tersedia */
+.fuel-chip.unavailable {
+  opacity: 0.55;
 }
 
 /* Driver Selection Box */

@@ -120,15 +120,19 @@ export async function performReceiptOCR(imageInput, onProgress = () => { }, cust
   try {
     onProgress({ status: 'Memulai mesin OCR...', progress: 0.1 });
 
-    // Step 1: Preprocessing & 720p Super-Sharpening
-    onProgress({ status: 'Meningkatkan resolusi ringan...', progress: 0.25 });
+    // PENTING: uploader SUDAH menjalankan penajaman/rotasi "Pertajam 720p" untuk
+    // tampilan pratinjau. Menajamkan gambar yang sudah tajam akan menambah noise
+    // dan justru memecah huruf tipis struk thermal — inilah penyebab angka nota
+    // (volume & harga/liter) sering tidak terbaca. Jadi di sini gambar hanya
+    // dinormalkan (grayscale + kontras ringan) TANPA penajaman & tanpa upscale.
+    onProgress({ status: 'Menyiapkan gambar untuk pembacaan...', progress: 0.25 });
     let preprocessedUrl;
     try {
       preprocessedUrl = await preprocessReceiptImage(imageInput, {
-        contrast: customOptions.contrast ?? 0,
+        contrast: customOptions.contrast ?? 12,
         brightness: customOptions.brightness ?? 0,
         sharpen: false,
-        upscaleLowRes: true,
+        upscaleLowRes: false,
         binarize: false
       });
     } catch (e) {
@@ -157,7 +161,24 @@ export async function performReceiptOCR(imageInput, onProgress = () => { }, cust
     // Step 2: Parse raw text into structured fuel data
     const parsedData = parseFuelReceiptText(text);
     parsedData.ocrConfidence = Math.round(confidence);
+    parsedData.engine = 'OCR Lokal (Tesseract.js)';
     parsedData.preprocessedImage = preprocessedUrl;
+
+    // Hasil OCR lokal dianggap BELUM final. Kalau mesinnya sendiri ragu, atau ada
+    // field wajib yang tidak terbaca, tandai agar pengguna/AI memeriksa — jangan
+    // biarkan form terisi angka yang tidak bisa dipertanggungjawabkan.
+    const confidenceLow = Math.round(confidence) < 65;
+    if (confidenceLow || parsedData.needsReview) {
+      parsedData.needsReview = true;
+      parsedData.reviewFields = [...new Set([
+        ...(parsedData.reviewFields || []),
+        ...(!parsedData.volumeLiters ? ['volumeLiters'] : []),
+        ...(!parsedData.pricePerLiter ? ['pricePerLiter'] : []),
+        ...(!parsedData.totalPrice ? ['totalPrice'] : [])
+      ])];
+      parsedData.ocrConfidence = Math.round(confidence);
+      parsedData.ocrLowConfidence = confidenceLow;
+    }
 
     onProgress({ status: 'Selesai!', progress: 1.0 });
     return {

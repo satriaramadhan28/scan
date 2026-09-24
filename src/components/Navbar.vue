@@ -1,7 +1,8 @@
 <script setup>
-import { Fuel, Sparkles, History, Key, BookOpen, Bot } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { Fuel, Sparkles, History, Key, BookOpen, Bot, RefreshCw, Wifi, WifiOff, Database } from 'lucide-vue-next';
 
-defineProps({
+const props = defineProps({
   activeTab: {
     type: String,
     default: 'scanner'
@@ -21,10 +22,33 @@ defineProps({
   activeUser: {
     type: Object,
     default: () => ({ name: 'Budi Santoso', role: 'Driver' })
+  },
+  fuelPriceStatus: {
+    type: Object,
+    default: () => ({ mode: 'bawaan', label: 'Harga bawaan', updatedAt: '' })
+  },
+  isUpdatingPrices: {
+    type: Boolean,
+    default: false
   }
 });
 
-defineEmits(['change-tab', 'open-api-modal', 'open-samples-modal', 'open-users-modal']);
+defineEmits(['change-tab', 'open-api-modal', 'open-samples-modal', 'open-users-modal', 'refresh-fuel-price']);
+
+// Tanggal berlaku harga, contoh "2 Sep 2026"
+const priceDateLabel = computed(() => {
+  const raw = props.fuelPriceStatus?.updatedAt;
+  if (!raw) return '-';
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+});
+
+const priceModeIcon = computed(() => {
+  if (props.fuelPriceStatus?.mode === 'otomatis') return Wifi;
+  if (props.fuelPriceStatus?.mode === 'cache') return Database;
+  return WifiOff;
+});
 </script>
 
 <template>
@@ -46,8 +70,8 @@ defineEmits(['change-tab', 'open-api-modal', 'open-samples-modal', 'open-users-m
 
       <!-- Navigation Tabs -->
       <nav class="nav-links">
-        <button 
-          class="nav-tab" 
+        <button
+          class="nav-tab"
           :class="{ active: activeTab === 'scanner' }"
           @click="$emit('change-tab', 'scanner')"
         >
@@ -55,8 +79,8 @@ defineEmits(['change-tab', 'open-api-modal', 'open-samples-modal', 'open-users-m
           <span>Pemindai Nota</span>
         </button>
 
-        <button 
-          class="nav-tab" 
+        <button
+          class="nav-tab"
           :class="{ active: activeTab === 'analytics' }"
           @click="$emit('change-tab', 'analytics')"
         >
@@ -64,8 +88,8 @@ defineEmits(['change-tab', 'open-api-modal', 'open-samples-modal', 'open-users-m
           <span>Statistik BBM</span>
         </button>
 
-        <button 
-          class="nav-tab" 
+        <button
+          class="nav-tab"
           :class="{ active: activeTab === 'history' }"
           @click="$emit('change-tab', 'history')"
         >
@@ -77,6 +101,24 @@ defineEmits(['change-tab', 'open-api-modal', 'open-samples-modal', 'open-users-m
 
       <!-- Action Buttons & User Profile Switcher -->
       <div class="header-actions">
+        <!-- Indikator Harga BBM (klik = perbarui sekarang) -->
+        <button
+          class="price-status-chip"
+          :class="fuelPriceStatus?.mode || 'bawaan'"
+          :disabled="isUpdatingPrices"
+          :title="`Harga BBM acuan berlaku ${priceDateLabel} (${fuelPriceStatus?.label || 'bawaan'}). Klik untuk perbarui dari sumber online.`"
+          @click="$emit('refresh-fuel-price')"
+        >
+          <RefreshCw :size="13" :class="{ 'spin-slow': isUpdatingPrices }" />
+          <span class="price-chip-text">
+            <span class="price-chip-title">Harga BBM {{ priceDateLabel }}</span>
+            <span class="price-chip-sub">
+              <component :is="priceModeIcon" :size="10" />
+              {{ isUpdatingPrices ? 'Memperbarui...' : (fuelPriceStatus?.label || 'Harga bawaan') }}
+            </span>
+          </span>
+        </button>
+
         <!-- Active User Profile Switcher -->
         <button 
           class="user-profile-btn"
@@ -337,5 +379,73 @@ defineEmits(['change-tab', 'open-api-modal', 'open-samples-modal', 'open-users-m
   .navbar-container {
     padding: 0 10px;
   }
+  .price-chip-text {
+    display: none;
+  }
+}
+
+/* Indikator harga BBM */
+.price-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  color: #7dd3fc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.price-status-chip:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.2);
+  color: #bae6fd;
+}
+
+.price-status-chip:disabled {
+  cursor: progress;
+  opacity: 0.8;
+}
+
+.price-status-chip.otomatis {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.32);
+  color: #34d399;
+}
+
+.price-status-chip.otomatis:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.22);
+  color: #6ee7b7;
+}
+
+.price-chip-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.price-chip-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.price-chip-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6rem;
+  opacity: 0.85;
+}
+
+.spin-slow {
+  animation: spin-slow 1.2s linear infinite;
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

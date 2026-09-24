@@ -11,6 +11,102 @@ export const QWEN_MODELS = [
   { id: 'qwen-vl-plus', name: 'Qwen VL Plus (Alibaba DashScope)', provider: 'dashscope' }
 ];
 
+/** Ambil URL endpoint sesuai penyedia yang dipilih di Pengaturan AI */
+function resolveEndpoint(provider, customEndpoint) {
+  if (provider === 'dashscope') {
+    return 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
+  }
+  if (provider === 'custom' && customEndpoint) {
+    return customEndpoint;
+  }
+  return 'https://openrouter.ai/api/v1/chat/completions';
+}
+
+/**
+ * Ubah respons model menjadi objek data nota.
+ * Tahan terhadap model yang membungkus JSON dengan teks/markdown, dan terhadap
+ * nilai yang dikirim sebagai string ("15.950", "3,13", "Rp 50.000").
+ */
+export function parseAiReceiptResponse(textResponse, engineName) {
+  if (!textResponse) throw new Error('Model tidak memberikan respons.');
+
+  // Buang pagar markdown ```json ... ``` lalu ambil blok JSON terluar
+  const cleaned = String(textResponse).replace(/```(?:json)?/gi, ' ').trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('Respons model tidak memuat JSON: ' + cleaned.slice(0, 120));
+
+  const parsed = JSON.parse(match[0]);
+  const data = normalizeAiFields(parsed);
+  data.ocrConfidence = 95;
+  data.engine = engineName;
+
+  return {
+    success: true,
+    rawText: parsed.rawTextSummary || JSON.stringify(data, null, 2),
+    data
+  };
+}
+
+const ANGKA = new Set(['volumeLiters', 'pricePerLiter', 'totalPrice']);
+
+/**
+ * Rapikan nilai dari AI: ubah string rupiah/liter menjadi angka, dan ubah isian
+ * kosong/"null"/"-" menjadi 0 supaya form tidak menampilkan "NaN" atau undefined.
+ */
+export function normalizeAiFields(parsed) {
+  const out = { ...parsed };
+
+  for (const key of ANGKA) {
+    const raw = out[key];
+    if (raw === null || raw === undefined || raw === '' || raw === '-') {
+      out[key] = 0;
+      continue;
+    }
+    if (typeof raw === 'number') {
+      out[key] = Number.isFinite(raw) ? raw : 0;
+      continue;
+    }
+    // "Rp 15.950" -> 15950 ; "3,13" -> 3.13 ; "3.13 Ltr" -> 3.13
+    let s = String(raw).replace(/[^\d.,]/g, '');
+    if (key === 'volumeLiters') {
+      // Volume: koma = desimal, titik = pemisah ribuan yang salah tulis
+      s = s.replace(/\.(?=\d{3}\b)/g, '').replace(',', '.');
+    } else {
+      // Rupiah: buang semua pemisah -> angka bulat
+      s = s.replace(/[.,]/g, '');
+    }
+    const num = parseFloat(s);
+    out[key] = Number.isFinite(num) ? num : 0;
+  }
+
+  // Kalau AI hanya mengisi 2 dari 3 nilai, lengkapi dari hubungan matematisnya
+  const vol = Number(out.volumeLiters) || 0;
+  const price = Number(out.pricePerLiter) || 0;
+  const total = Number(out.totalPrice) || 0;
+  if (total > 0 && price > 0 && !vol) {
+    out.volumeLiters = parseFloat((total / price).toFixed(2));
+  } else if (total > 0 && vol > 0 && !price) {
+    out.pricePerLiter = Math.round(total / vol);
+  } else if (vol > 0 && price > 0 && !total) {
+    out.totalPrice = Math.round(vol * price);
+  }
+
+  // Nilai yang benar-benar tidak terbaca ditandai agar tampil sebagai peringatan
+  const missing = [];
+  if (!Number(out.volumeLiters)) missing.push('volumeLiters');
+  if (!Number(out.pricePerLiter)) missing.push('pricePerLiter');
+  if (!Number(out.totalPrice)) missing.push('totalPrice');
+  if (!out.spbuName) missing.push('spbuName');
+  if (!out.fuelType) missing.push('fuelType');
+  if (!out.receiptNo) missing.push('receiptNo');
+  if (missing.length) {
+    out.needsReview = true;
+    out.reviewFields = missing;
+  }
+
+  return out;
+}
+
 export async function extractFuelReceiptWithQwen(imageBase64OrUrl, config = {}) {
   const apiKey = config.apiKey || '';
   const provider = config.provider || 'openrouter';
@@ -34,47 +130,70 @@ export async function extractFuelReceiptWithQwen(imageBase64OrUrl, config = {}) 
   }
 
   // Determine endpoint
-  let endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+  let endpoint = resolveEndpoint(provider, customEndpoint);
   let headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${apiKey}`
   };
 
-  if (provider === 'dashscope') {
-    endpoint = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
-  } else if (provider === 'custom' && customEndpoint) {
-    endpoint = customEndpoint;
-  } else if (provider === 'openrouter') {
+  if (provider === 'openrouter') {
     headers['HTTP-Referer'] = 'http://localhost:5173/';
     headers['X-Title'] = 'FuelScan Nota SPBU';
   }
 
+  // Foto dikirim APA ADANYA (tanpa penajaman) karena model vision justru lebih
+  // akurat pada gambar asli. Hanya diperbesar bila resolusinya kecil, supaya
+  // angka kecil di struk thermal tidak kabur saat dikirim.
+  const preparedUrl = await prepareImageForVision(dataUrl);
+
   const prompt = `Anda adalah asisten AI OCR ahli pembaca struk bensin / nota SPBU di Indonesia.
 Analisis gambar struk ini dengan SANGAT TELITI. Ekstrak data SECARA HARFIAH/PERSIS seperti yang tertulis di gambar. DILARANG KERAS mengarang/berhalusinasi. Kembalikan data dalam format JSON murni TANPA tulisan apapun selain JSON.
 
+>> FOKUS UTAMA — tiga angka ini WAJIB diisi dan paling sering salah. Cari sampai dapat:
+1) "volumeLiters": VOLUME pengisian dalam liter.
+   Letaknya di baris/kolom seperti: "Volume", "Vol", "Qty", "Liter", "Ltr", "L",
+   atau di baris berita pembelian seperti "3.13 Ltr x Rp 15.950".
+   PENTING: jangan tertukar dengan angka lain di struk.
+2) "pricePerLiter": HARGA PER LITER (bukan total bayar).
+   Letaknya di baris "Harga Jual/Liter", "Harga/Liter", "Harga/L", "HRG/LTR", "@", "Price/L".
+   PENTING: kalau di struk tertulis 15.950 (lima belas ribu sembilan ratus lima puluh),
+   tulis 15950 — bilangan bulat, tanpa titik, tanpa "Rp".
+3) "totalPrice": TOTAL PEMBAYARAN BBM.
+   Letaknya di baris "Total", "Nominal", "Jumlah", "Berita Pembelian", "Bayar"/"Cash", "Tunai", "Debit".
+   PENTING: baris berita pembelian / nominal biasanya memuat angka yang benar-benar dibayarkan —
+   pakai angka itu kalau lebih pasti daripada baris TOTAL.
+
+Cara memisahkan angka (sangat penting, ini sumber utama kesalahan):
+- Volume selalu punya 2 angka desimal. Contoh: 3.13 atau 3,13 -> 3.13
+- Harga per liter selalu 4-6 digit sebelum desimal. Contoh: Rp 15.950 -> 15950
+- Total bayar biasanya angka bulat/penuh. Contoh: Rp 50.000 -> 50000
+- Kalau volume x harga per liter TIDAK mendekati total, berarti salah satu angka salah baca:
+  baca ulang gambarnya dan perbaiki sebelum menjawab.
+- Jangan memakai harga yang umum di pasaran; pakai HANYA angka yang tercetak di struk ini.
+
 Format JSON yang wajib dihasilkan:
 {
-  "spbuName": "Salin NAMA SPBU atau Lokasi persis seperti di bagian atas struk (cth: SPBU SUKODONO, SPBU 34.12345)",
-  "spbuCode": "Nomor kode SPBU jika ada (cth: 34.123.45, kosongkan jika tidak ada)",
-  "fuelType": "Jenis BBM (cth: Pertalite (RON 90), Pertamax (RON 92), Pertamax Turbo (RON 98), Dexlite, Pertamina Dex, Shell Super, Shell V-Power, BP 92, Biosolar)",
+  "spbuName": "Salin NAMA SPBU atau Lokasi persis seperti di bagian atas struk (cth: SPBU SUKODONO)",
+  "spbuCode": "Nomor kode SPBU jika ada (cth: 34.123.45)",
+  "fuelType": "Jenis BBM (cth: Pertalite (RON 90), Pertamax (RON 92), Dexlite, Shell V-Power, BP 92)",
   "fuelBrand": "Pertamina / Shell / BP / Vivo",
-  "volumeLiters": 25.00,
-  "pricePerLiter": 12950,
-  "totalPrice": 323750,
+  "volumeLiters": 3.13,
+  "pricePerLiter": 15950,
+  "totalPrice": 50000,
   "paymentMethod": "Tunai (Cash) / QRIS / MyPertamina / Kartu Debit / Kartu Kredit",
-  "date": "Ekstrak tanggal, format wajib YYYY-MM-DD (contoh: 2026-09-22)",
-  "time": "Ekstrak jam pengisian (contoh: 06:03)",
-  "pumpNo": "Salin Angka/Nomor Pompa / Pulau Pompa",
-  "nozzleNo": "Salin Angka/Nomor Nozzle/Selang (kosongkan jika tidak ada)",
-  "receiptNo": "Salin Nomor Struk / No. Trans persis seperti gambar",
-  "rawTextSummary": "Ketik ulang secara berurut baris teks penting di struk, agar mudah diverifikasi"
+  "date": "Tanggal, format wajib YYYY-MM-DD (contoh: 2026-09-24)",
+  "time": "Jam pengisian (contoh: 08:08)",
+  "pumpNo": "Angka/Nomor Pompa / Pulau Pompa",
+  "nozzleNo": "Angka/Nomor Nozzle/Selang",
+  "receiptNo": "Nomor Struk / No. Trans / nomor di sisi kiri struk",
+  "rawTextSummary": "Ketik ulang berurut baris teks penting di struk beserta angkanya"
 }
 
-Perhatian:
-- volumeLiters: float (contoh: 3.13)
-- pricePerLiter dan totalPrice: integer (contoh: 15950)
-- Jika tidak terbaca, kembalikan null atau 0.
-- Keluarkan HANYA string JSON yang valid, tanpa awalan pesan seperti 'Berikut adalah JSON...'.`;
+Aturan angka:
+- volumeLiters: angka desimal dengan titik (contoh: 3.13). Jangan tulis satuan.
+- pricePerLiter dan totalPrice: bilangan bulat tanpa pemisah ribuan dan tanpa "Rp".
+- DILARANG mengarang. Kalau benar-benar tidak ada di gambar, tulis 0.
+- Keluarkan HANYA string JSON yang valid, tanpa awalan seperti 'Berikut adalah JSON...'.`;
 
   const requestBody = {
     model: model,
@@ -86,14 +205,15 @@ Perhatian:
           {
             type: 'image_url',
             image_url: {
-              url: dataUrl
+              url: preparedUrl,
+              detail: 'high'
             }
           }
         ]
       }
     ],
     temperature: 0.1,
-    max_tokens: 1500
+    max_tokens: 2000
   };
 
   const res = await fetch(endpoint, {
@@ -110,26 +230,45 @@ Perhatian:
   const resultData = await res.json();
   const textResponse = resultData.choices?.[0]?.message?.content;
 
-  if (!textResponse) {
-    throw new Error('Qwen AI tidak memberikan respons yang valid.');
-  }
-
   try {
-    // Robust JSON extraction matching { to } in case AI prepends markdown/text
-    const match = textResponse.match(/\{[\s\S]*\}/);
-    if (!match) {
-      throw new Error("Tidak menemukan blok JSON");
-    }
-    const parsed = JSON.parse(match[0]);
-    parsed.ocrConfidence = 99;
-    parsed.engine = `Qwen AI (${model.split('/')[1] || model})`;
-
-    return {
-      success: true,
-      rawText: parsed.rawTextSummary || JSON.stringify(parsed, null, 2),
-      data: parsed
-    };
+    return parseAiReceiptResponse(textResponse, `Qwen AI (${model.split('/')[1] || model})`);
   } catch (err) {
-    throw new Error('Gagal memproses JSON dari Qwen AI: ' + textResponse);
+    throw new Error('Gagal memproses jawaban Qwen AI: ' + err.message);
   }
+}
+
+/**
+ * Siapkan gambar untuk model vision:
+ * - Dikirim apa adanya (TANPA penajaman/kontras), karena model AI lebih akurat
+ *   pada gambar asli dibanding gambar yang sudah diolah filter.
+ * - Hanya diperbesar bila sisi terpanjangnya di bawah 1400 px, supaya angka
+ *   kecil pada struk thermal tidak kabur saat dikirim ke model.
+ * - Otomatis dibatasi maksimal 2000 px agar tidak melebihi batas ukuran API.
+ */
+async function prepareImageForVision(dataUrl) {
+  if (typeof document === 'undefined') return dataUrl;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const longest = Math.max(img.width, img.height);
+        if (longest >= 1400) return resolve(dataUrl); // sudah cukup tajam
+
+        const scale = Math.min(2000 / longest, 3);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.95));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
 }
