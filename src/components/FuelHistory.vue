@@ -8,7 +8,12 @@ import {
   Edit, 
   CheckSquare, 
   Square,
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  User,
+  Fuel,
+  RotateCcw,
+  X
 } from 'lucide-vue-next';
 import { formatRupiah, formatNumber, exportReceiptsToCsv } from '../services/pdfExportService.js';
 import { FUEL_TYPES } from '../services/spbuParser.js';
@@ -28,18 +33,40 @@ const emit = defineEmits(['edit-receipt', 'delete-receipt', 'clear-all']);
 
 const searchQuery = ref('');
 const selectedUserFilter = ref('all');
+const selectedDateFilter = ref('');
+const selectedPeriodFilter = ref('all');
 const selectedFuelFilter = ref('all');
 const selectedIds = ref(new Set());
+
+// Date calculation helpers
+const todayStr = computed(() => {
+  const d = new Date();
+  return d.toISOString().split('T')[0];
+});
+
+const currentMonthStr = computed(() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+});
+
+const hasActiveFilters = computed(() => {
+  return searchQuery.value.trim() !== '' || 
+    selectedUserFilter.value !== 'all' || 
+    selectedFuelFilter.value !== 'all' || 
+    selectedPeriodFilter.value !== 'all' || 
+    selectedDateFilter.value !== '';
+});
 
 const filteredReceipts = computed(() => {
   return props.receipts.filter(r => {
     // Search text
-    const query = searchQuery.value.toLowerCase();
+    const query = searchQuery.value.toLowerCase().trim();
     const matchText = !query || 
       (r.employeeName && r.employeeName.toLowerCase().includes(query)) ||
       (r.spbuName && r.spbuName.toLowerCase().includes(query)) ||
       (r.fuelType && r.fuelType.toLowerCase().includes(query)) ||
-      (r.receiptNo && r.receiptNo.toLowerCase().includes(query));
+      (r.receiptNo && r.receiptNo.toLowerCase().includes(query)) ||
+      (r.date && r.date.includes(query));
 
     // User filter
     const matchUser = selectedUserFilter.value === 'all' || r.employeeName === selectedUserFilter.value;
@@ -47,9 +74,52 @@ const filteredReceipts = computed(() => {
     // Fuel filter
     const matchFuel = selectedFuelFilter.value === 'all' || r.fuelType === selectedFuelFilter.value;
 
-    return matchText && matchUser && matchFuel;
+    // Date & Period Filter
+    let matchDate = true;
+    if (selectedDateFilter.value) {
+      matchDate = r.date === selectedDateFilter.value;
+    } else if (selectedPeriodFilter.value === 'today') {
+      matchDate = r.date === todayStr.value;
+    } else if (selectedPeriodFilter.value === 'last7') {
+      if (!r.date) return false;
+      const rTime = new Date(r.date).getTime();
+      const nowTime = new Date().getTime();
+      const diffDays = (nowTime - rTime) / (1000 * 3600 * 24);
+      matchDate = diffDays >= 0 && diffDays <= 7;
+    } else if (selectedPeriodFilter.value === 'this_month') {
+      matchDate = r.date && r.date.startsWith(currentMonthStr.value);
+    }
+
+    return matchText && matchUser && matchFuel && matchDate;
   });
 });
+
+// Summary metrics of current filtered data
+const filteredSummary = computed(() => {
+  const totalRp = filteredReceipts.value.reduce((acc, c) => acc + (Number(c.totalPrice) || 0), 0);
+  const totalLiters = filteredReceipts.value.reduce((acc, c) => acc + (Number(c.volumeLiters) || 0), 0);
+  return {
+    count: filteredReceipts.value.length,
+    totalRp,
+    totalLiters
+  };
+});
+
+function handlePeriodChange(e) {
+  const val = e.target.value;
+  selectedPeriodFilter.value = val;
+  if (val !== 'custom') {
+    selectedDateFilter.value = '';
+  }
+}
+
+function resetFilters() {
+  searchQuery.value = '';
+  selectedUserFilter.value = 'all';
+  selectedDateFilter.value = '';
+  selectedPeriodFilter.value = 'all';
+  selectedFuelFilter.value = 'all';
+}
 
 function toggleSelect(id) {
   if (selectedIds.value.has(id)) {
@@ -88,14 +158,30 @@ function getFuelBadgeColor(fuelName) {
         <History :size="22" class="text-emerald" />
         <div>
           <h2 class="history-title">Riwayat Pengisian & Nota Bensin</h2>
-          <p class="history-subtitle">Total {{ filteredReceipts.length }} struk ditemukan</p>
+          <p class="history-subtitle">
+            Menampilkan {{ filteredReceipts.length }} struk 
+            <span v-if="filteredReceipts.length > 0" class="sub-highlight">
+              • Total: {{ formatRupiah(filteredSummary.totalRp) }} ({{ formatNumber(filteredSummary.totalLiters) }} L)
+            </span>
+          </p>
         </div>
       </div>
 
       <div class="header-actions">
+        <!-- Reset Filters Button if Active -->
+        <button 
+          v-if="hasActiveFilters" 
+          class="btn btn-secondary btn-sm"
+          @click="resetFilters"
+          title="Reset semua filter"
+        >
+          <RotateCcw :size="14" />
+          <span>Reset Filter</span>
+        </button>
+
         <!-- Export CSV Button -->
         <button 
-          class="btn btn-secondary btn-sm" 
+          class="btn btn-primary btn-sm" 
           :disabled="filteredReceipts.length === 0"
           @click="handleExportCsv"
         >
@@ -113,13 +199,21 @@ function getFuelBadgeColor(fuelName) {
         <input 
           type="text" 
           v-model="searchQuery" 
-          placeholder="Cari nama pengguna, SPBU, jenis BBM, nomor struk..."
+          placeholder="Cari nama pengguna, SPBU, nomor struk..."
           class="search-input"
         />
+        <button 
+          v-if="searchQuery" 
+          class="search-clear-btn" 
+          @click="searchQuery = ''"
+        >
+          <X :size="14" />
+        </button>
       </div>
 
       <!-- Driver / User Filter -->
-      <div class="filter-dropdown">
+      <div class="filter-item">
+        <label class="filter-mini-label"><User :size="13" /> Nama Pengguna:</label>
         <select v-model="selectedUserFilter" class="form-select filter-select">
           <option value="all">👤 Semua Nama Pengguna</option>
           <option v-for="u in users" :key="u.id" :value="u.name">
@@ -128,8 +222,36 @@ function getFuelBadgeColor(fuelName) {
         </select>
       </div>
 
-      <!-- Fuel Filter -->
-      <div class="filter-dropdown">
+      <!-- Date / Period Filter -->
+      <div class="filter-item">
+        <label class="filter-mini-label"><Calendar :size="13" /> Tanggal / Periode:</label>
+        <div class="date-filter-group">
+          <select 
+            :value="selectedPeriodFilter" 
+            @change="handlePeriodChange"
+            class="form-select filter-select"
+          >
+            <option value="all">📅 Semua Tanggal</option>
+            <option value="today">📅 Hari Ini</option>
+            <option value="last7">📅 7 Hari Terakhir</option>
+            <option value="this_month">📅 Bulan Ini</option>
+            <option value="custom">📅 Pilih Tanggal Spesifik...</option>
+          </select>
+
+          <!-- Specific Date Picker Input if custom or when date is set -->
+          <input 
+            v-if="selectedPeriodFilter === 'custom' || selectedDateFilter" 
+            type="date" 
+            v-model="selectedDateFilter" 
+            class="form-input filter-date-picker"
+            title="Pilih tanggal struk"
+          />
+        </div>
+      </div>
+
+      <!-- Fuel Filter (Optional) -->
+      <div class="filter-item">
+        <label class="filter-mini-label"><Fuel :size="13" /> Jenis BBM:</label>
         <select v-model="selectedFuelFilter" class="form-select filter-select">
           <option value="all">⛽ Semua Jenis BBM</option>
           <option v-for="f in FUEL_TYPES" :key="f.name" :value="f.name">
@@ -139,11 +261,40 @@ function getFuelBadgeColor(fuelName) {
       </div>
     </div>
 
+    <!-- Active Filter Tags indicator -->
+    <div v-if="hasActiveFilters" class="active-filter-tags">
+      <span class="active-filter-title">Filter aktif:</span>
+      <span v-if="selectedUserFilter !== 'all'" class="filter-tag">
+        👤 {{ selectedUserFilter }}
+        <button @click="selectedUserFilter = 'all'"><X :size="12" /></button>
+      </span>
+      <span v-if="selectedDateFilter" class="filter-tag">
+        📅 Tanggal: {{ selectedDateFilter }}
+        <button @click="selectedDateFilter = ''; selectedPeriodFilter = 'all'"><X :size="12" /></button>
+      </span>
+      <span v-else-if="selectedPeriodFilter !== 'all'" class="filter-tag">
+        📅 {{ selectedPeriodFilter === 'today' ? 'Hari Ini' : selectedPeriodFilter === 'last7' ? '7 Hari Terakhir' : 'Bulan Ini' }}
+        <button @click="selectedPeriodFilter = 'all'"><X :size="12" /></button>
+      </span>
+      <span v-if="selectedFuelFilter !== 'all'" class="filter-tag">
+        ⛽ {{ selectedFuelFilter }}
+        <button @click="selectedFuelFilter = 'all'"><X :size="12" /></button>
+      </span>
+      <span v-if="searchQuery" class="filter-tag">
+        🔍 "{{ searchQuery }}"
+        <button @click="searchQuery = ''"><X :size="12" /></button>
+      </span>
+    </div>
+
     <!-- Empty State -->
     <div v-if="filteredReceipts.length === 0" class="empty-history">
-      <AlertCircle :size="36" class="text-muted" />
+      <AlertCircle :size="38" class="text-muted" />
       <p class="empty-title">Tidak ada riwayat struk yang cocok</p>
-      <p class="empty-desc">Coba ubah kata kunci pencarian atau filter pengguna.</p>
+      <p class="empty-desc">Tidak ditemukan catatan untuk nama pengguna atau tanggal yang dipilih.</p>
+      <button v-if="hasActiveFilters" class="btn btn-secondary btn-sm mt-2" @click="resetFilters">
+        <RotateCcw :size="14" />
+        <span>Tampilkan Semua Riwayat</span>
+      </button>
     </div>
 
     <!-- Receipts Table -->
@@ -287,6 +438,11 @@ function getFuelBadgeColor(fuelName) {
   color: var(--text-secondary);
 }
 
+.sub-highlight {
+  color: #34d399;
+  font-weight: 600;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -296,15 +452,34 @@ function getFuelBadgeColor(fuelName) {
 /* Filter Toolbar */
 .filter-toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 12px;
   flex-wrap: wrap;
+  background: rgba(13, 21, 39, 0.4);
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filter-mini-label {
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .search-box {
   position: relative;
   flex: 1;
-  min-width: 240px;
+  min-width: 220px;
 }
 
 .search-icon {
@@ -316,9 +491,30 @@ function getFuelBadgeColor(fuelName) {
   pointer-events: none;
 }
 
+.search-clear-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.search-clear-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .search-input {
   width: 100%;
-  padding: 9px 12px 9px 36px;
+  padding: 9px 32px 9px 36px;
   background: var(--bg-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -332,9 +528,75 @@ function getFuelBadgeColor(fuelName) {
 }
 
 .filter-select {
-  padding: 9px 14px;
+  padding: 9px 12px;
   font-size: 0.85rem;
-  min-width: 175px;
+  min-width: 170px;
+  background: var(--bg-input);
+}
+
+.date-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-date-picker {
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  outline: none;
+  max-width: 150px;
+}
+
+.filter-date-picker:focus {
+  border-color: var(--accent-emerald);
+}
+
+/* Active Filter Tags */
+.active-filter-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  margin-top: -6px;
+}
+
+.active-filter-title {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 9999px;
+  color: #34d399;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.filter-tag button {
+  background: none;
+  border: none;
+  color: #a7f3d0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  transition: transform 0.15s;
+}
+
+.filter-tag button:hover {
+  color: #fff;
+  transform: scale(1.15);
 }
 
 /* Table */

@@ -167,9 +167,9 @@ function save() {
             <div class="card-info">
               <div class="card-title">
                 <Globe :size="16" class="text-purple" />
-                <span>Google Gemini AI (1.5 / 2.0 Flash)</span>
+                <span>Google Gemini AI (2.5 Flash / Pro)</span>
               </div>
-              <p class="card-desc">Ekstraksi multimodal menggunakan API Google Gemini.</p>
+              <p class="card-desc">Ekstraksi multimodal super cepat & akurat menggunakan model Google Gemini 2.5.</p>
               <span class="pill-badge purple">Google AI Studio</span>
             </div>
           </div>

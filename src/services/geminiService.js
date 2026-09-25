@@ -154,15 +154,14 @@ Aturan angka:
 
   const modelsToTry = [
     'gemini-1.5-flash',
-    'gemini-1.5-flash-latest',
-    'gemini-1.5-pro',
     'gemini-2.0-flash',
     'gemini-2.5-flash',
-    'gemini-pro-vision'
+    'gemini-1.5-pro'
   ];
 
   let res = null;
   let lastError = null;
+  let errorDetails = [];
 
   for (const model of modelsToTry) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -179,19 +178,25 @@ Aturan angka:
         break; // Success!
       } else {
         const errData = await res.json().catch(() => ({}));
-        lastError = new Error(errData.error?.message || `Gagal menghubungi Gemini API (Status ${res.status})`);
-        // If error is about API key invalid, don't keep trying
-        if (res.status === 400 && errData.error?.message.includes('API key')) {
-          throw lastError;
+        const msg = errData.error?.message || `Status ${res.status}`;
+        lastError = new Error(msg);
+        errorDetails.push(`[${model}] ${msg}`);
+        
+        // If API key is invalid or quota issue, don't keep looping
+        if (res.status === 400 || res.status === 403 || res.status === 401) {
+          throw new Error(`API Key Gemini tidak valid atau ditolak: ${msg}`);
         }
       }
     } catch (e) {
       lastError = e;
+      if (e.message.includes('API Key Gemini tidak valid') || e.message.includes('API key')) {
+        throw e;
+      }
     }
   }
 
   if (!res || !res.ok) {
-    throw lastError || new Error("Semua model Gemini gagal diakses.");
+    throw lastError || new Error(`Gagal memanggil Gemini API:\n${errorDetails.join('\n')}`);
   }
 
   const resultData = await res.json();
