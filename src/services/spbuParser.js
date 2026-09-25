@@ -282,9 +282,10 @@ export function parseFuelReceiptText(rawText) {
 
   // 4. Extract Price Per Liter (Harga / Liter)
   const pricePerLiterPatterns = [
-    /(?:HARGA[A-Za-z\s\/]*LITER|HARGA[A-Za-z\s\/]*L|PRICE[A-Za-z\s\/]*L|HARGA\/LTR|HRG\/LITER)[^\d]*([0-9]{1,2}[\.,][0-9]{3})/i,
+    /(?:HARGA[A-Za-z\s\/]*LITER|HARGA[A-Za-z\s\/]*L|PRICE[A-Za-z\s\/]*L|HARGA\/LTR|HRG\/LITER|PRICE)[^\d]*(?:RP\.?\s*)?([0-9]{1,2}[\.,][0-9]{3})/i,
     /(?:RP\.?[\s]*)?([0-9]{1,2}[\.,][0-9]{3})\s*[\/]\s*(?:L|LTR|LITER)/i,
-    /@[\s]*([0-9]{1,2}[\.,][0-9]{3})/i
+    /@[\s]*([0-9]{1,2}[\.,][0-9]{3})/i,
+    /([0-9]{1,2}[\.,][0-9]{3})\b.*(?:LITER|LTR|L)\b/i
   ];
 
   for (const pattern of pricePerLiterPatterns) {
@@ -309,7 +310,8 @@ export function parseFuelReceiptText(rawText) {
   // 5. Extract Volume (Liter / Vol / Qty)
   // Baris berlabel "Volume : 4,60 Liter" didahulukan supaya angka lain di nota
   // (jumlah bayar, nomor struk) tidak dianggap volume.
-  const labeledVolume = lines.map(l => l.match(/(?:VOLUME|VOL|QTY|JUMLAH\s*LITER|LITER)\s*[:=]?\s*([0-9]{1,3}[,.]\s?[0-9]{1,3})/i)).find(Boolean);
+  // UPDATE: Menangani label "(L)" yang sering muncul di nota Pertamax (Volume : (L) 3.13)
+  const labeledVolume = lines.map(l => l.match(/(?:VOLUME|VOL|QTY|JUMLAH\s*LITER|LITER|TOTAL\s*VOL)\s*[:=]?\s*(?:\([A-Z0-9]\)\s*)?([0-9]{1,3}[,.]\s?[0-9]{1,3})/i)).find(Boolean);
   if (labeledVolume) {
     const val = parseIndonesianFloat(labeledVolume[1]);
     if (val > 0.5 && val < 500) result.volumeLiters = parseFloat(val.toFixed(2));
@@ -317,8 +319,9 @@ export function parseFuelReceiptText(rawText) {
 
   if (!result.volumeLiters) {
     const volumePatterns = [
-      /([0-9]{1,3}[,\.][0-9]{2})\s*(?:LTR|LITER|L)\b/i,
-      /(?:VOLUME[A-Za-z\s]*|QTY|LITER|VOL)[\s:=]*(?:[\(\[]?[Ll1I][\)\]]?)?\s*([0-9]{1,3}[,\.][0-9]{1,3})/i
+      /([0-9]{1,3}[,\.][0-9]{2,3})\s*(?:LTR|LITER|L)\b/i,
+      /(?:VOLUME[A-Za-z\s]*|QTY|LITER|VOL)[\s:=]*(?:\([^)]*\))?\s*([0-9]{1,3}[,\.][0-9]{1,3})/i,
+      /\b([0-9]{1,3}[,.]\s?[0-9]{2,3})\s*(?:L|LTR|LITER)\b/i
     ];
 
     for (const pattern of volumePatterns) {
@@ -361,35 +364,45 @@ export function parseFuelReceiptText(rawText) {
   }
 
   // 6. Extract Date & Time
-  // Struk menulis tanggal + jam berdampingan (mis. "24/09/2026 08:08:13"), jadi jam
-  // dicek lebih dulu supaya tidak bikin regex tanggal salah cocok.
-  const dateTimeMatch = normalizedRaw.match(/([0-3]?[0-9][\/\-\.][0-1]?[0-9][\/\-\.](?:20)?[0-9]{2})\s+([0-2]?[0-9]:[0-5][0-9](?::[0-5][0-9])?)/);
+  // Struk menulis tanggal + jam berdampingan (mis. "24/09/2026 08:08:13")
+  // atau dengan label "Waktu: 22/09/2026 06:03:00"
+  // UPDATE: Regex Jam lebih fleksibel menangani kesalahan OCR (mis. 0 terbaca C atau O)
+  const timeRegexPart = `([0-2]?[0-9A-Z]:[0-5][0-9A-Z](?::[0-5][0-9A-Z])?)`;
+  const dateTimeMatch = normalizedRaw.match(new RegExp(`([0-3]?[0-9][\\/\\-\\.][0-1]?[0-9][\\/\\-\\.](?:20)?[0-9]{2,4})\\s+${timeRegexPart}`, 'i'));
 
   if (dateTimeMatch) {
     result.date = normalizeDate(dateTimeMatch[1]);
     result.time = normalizeTime(dateTimeMatch[2]);
   } else {
-    const dateMatch = normalizedRaw.match(/([0-3]?[0-9][\/\-\.][0-1]?[0-9][\/\-\.](?:20)?[0-9]{2})/) ||
-      normalizedRaw.match(/(?:20[0-9]{2}[\/\-\.][0-1]?[0-9][\/\-\.][0-3]?[0-9])/);
+    // Cari tanggal secara mandiri
+    const dateMatch = normalizedRaw.match(/([0-3]?[0-9][\/\-\.][0-1]?[0-9][\/\-\.](?:20)?[0-9]{2,4})/) ||
+      normalizedRaw.match(/(?:20[0-9]{2,4}[\/\-\.][0-1]?[0-9][\/\-\.][0-3]?[0-9])/);
+    
     if (dateMatch) {
       result.date = normalizeDate(dateMatch[1]);
     } else {
-      // Tanggal TIDAK dikarang dari tanggal hari ini — biarkan kosong agar diperiksa.
       result.date = '';
       result.needsReview = true;
       result.reviewFields = [...new Set([...(result.reviewFields || []), 'date'])];
     }
 
-    const timeMatch = normalizedRaw.match(/([0-2]?[0-9]:[0-5][0-9](?::[0-5][0-9])?)/);
+    // Cari jam secara mandiri (terutama jika ada label Waktu/Jam)
+    const timeMatch = normalizedRaw.match(new RegExp(`(?:WAKTU|JAM|TIME|PADA)[\\s:=]*${timeRegexPart}`, 'i')) ||
+                      normalizedRaw.match(new RegExp(timeRegexPart, 'i'));
+    
     result.time = timeMatch ? normalizeTime(timeMatch[1]) : '';
   }
 
   // 7. Extract Pump & Receipt No
-  const pumpMatch = normalizedRaw.match(/(?:PULAU[A-Za-z\s\/]*POMPA|POMPA|PUMP)[\s:=#\.]*([0-9lLiIoO]{1,2})\b/i);
+  // UPDATE: Tambahkan filter pembersih karakter non-digit untuk pompa agar lebih akurat
+  const pumpMatch = normalizedRaw.match(/(?:PULAU[A-Za-z\s\/]*POMPA|POMPA|PUMP|PULAU\/POMPA|PULAU)[\s:=#\.]*([0-9lLiIoO]{1,3})/i);
   if (pumpMatch) {
-    result.pumpNo = pumpMatch[1].replace(/[lLiIoO]/g, m => ({ l: '1', L: '1', I: '1', i: '1', o: '0', O: '0' }[m])).padStart(2, '0');
+    result.pumpNo = cleanOcrNumber(pumpMatch[1]).padStart(2, '0');
   }
-  const nozzleMatch = normalizedRaw.match(/(?:NOZZLE|SELANG|NOZ?)[\s:=#\.]*([0-9lLiIoO]{1,2})\b/i);
+  const nozzleMatch = normalizedRaw.match(/(?:NOZZLE|SELANG|NOZ?|NOZEL)[\s:=#\.]*([0-9lLiIoO]{1,3})/i);
+  if (nozzleMatch) {
+    result.nozzleNo = cleanOcrNumber(nozzleMatch[1]).padStart(2, '0');
+  }
   if (nozzleMatch) {
     result.nozzleNo = nozzleMatch[1].replace(/[lLiIoO]/g, m => ({ l: '1', L: '1', I: '1', i: '1', o: '0', O: '0' }[m])).padStart(2, '0');
   }
@@ -428,7 +441,31 @@ export function parseFuelReceiptText(rawText) {
 
 function normalizeTime(rawTime) {
   if (!rawTime) return '';
-  return String(rawTime).slice(0, 5);
+  // Perbaiki kesalahan OCR umum pada angka jam (mis. C terbaca 0, I terbaca 1)
+  let clean = String(rawTime).toUpperCase()
+    .replace(/[OQC]/g, '0')
+    .replace(/[ILl]/g, '1')
+    .replace(/S/g, '5')
+    .replace(/B/g, '8');
+  
+  // Ambil format HH:mm
+  const match = clean.match(/([0-2][0-9]):([0-5][0-9])/);
+  if (match) {
+    return `${match[1]}:${match[2]}`;
+  }
+  return clean.slice(0, 5);
+}
+
+/**
+ * Fungsi pembantu untuk membersihkan angka dari kesalahan OCR
+ */
+function cleanOcrNumber(str) {
+  if (!str) return '';
+  return str.replace(/[OQC]/g, '0')
+            .replace(/[ILl]/g, '1')
+            .replace(/S/g, '5')
+            .replace(/B/g, '8')
+            .replace(/[^\d]/g, '');
 }
 
 /**
