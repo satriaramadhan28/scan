@@ -17,9 +17,10 @@ import {
   Maximize2,
   Smartphone,
   Layers,
-  Wand2
+  Wand2,
+  Crop
 } from 'lucide-vue-next';
-import { preprocessReceiptImage } from '../services/ocrService.js';
+import { preprocessReceiptImage, autoCropReceiptImage } from '../services/ocrService.js';
 
 const props = defineProps({
   isScanning: {
@@ -61,6 +62,7 @@ const binarize = ref(false);
 const upscaleLowRes = ref(true);
 const showFilterPanel = ref(false);
 const isAutoSharpening = ref(false);
+const isAutoCropping = ref(false);
 
 function triggerFileInput() {
   fileInputRef.value?.click();
@@ -239,6 +241,26 @@ async function triggerAutoSuperSharpen() {
   }
 }
 
+// Auto-detect & crop receipt paper boundary from background
+async function handleAutoCrop() {
+  if (!originalImage.value && !previewImage.value) return;
+  isAutoCropping.value = true;
+  try {
+    const srcImg = previewImage.value || originalImage.value;
+    const cropped = await autoCropReceiptImage(srcImg);
+    if (cropped) {
+      previewImage.value = cropped;
+      originalImage.value = cropped;
+      emit('image-selected', cropped);
+      emit('raw-image-selected', cropped);
+    }
+  } catch (err) {
+    console.warn('Auto-crop error:', err);
+  } finally {
+    isAutoCropping.value = false;
+  }
+}
+
 // Image Manipulations
 function rotateImage() {
   rotation.value = (rotation.value + 90) % 360;
@@ -404,8 +426,16 @@ defineExpose({
           <UploadCloud :size="36" class="text-emerald" />
         </div>
         <h3 class="dropzone-title">Ambil / Unggah Foto Struk SPBU</h3>
-        <p class="dropzone-sub">Mendukung kamera HP resolusi tinggi, webcam 720p dengan penajam otomatis, JPG, & PNG</p>
+        <p class="dropzone-sub">Mendukung nota <strong>Pertamina</strong>, <strong>Shell</strong>, <strong>BP-AKR</strong>, & <strong>Vivo</strong></p>
         
+        <!-- Supported SPBU Brands Badges -->
+        <div class="spbu-brands-row" @click.stop>
+          <span class="brand-pill pertamina">🔴 Pertamina</span>
+          <span class="brand-pill shell">🟡 Shell</span>
+          <span class="brand-pill bp">🟢 BP-AKR</span>
+          <span class="brand-pill vivo">🔵 Vivo</span>
+        </div>
+
         <div class="dropzone-actions" @click.stop>
           <!-- Option 1: Native Phone Camera (Bypasses 720p limit) -->
           <button class="btn btn-primary" title="Menggunakan kamera HP resolusi penuh" @click="triggerNativeCamera">
@@ -426,12 +456,12 @@ defineExpose({
         <!-- 720p Optimization Note -->
         <div class="res-advice-banner" @click.stop>
           <Sparkles :size="14" class="text-emerald" />
-          <span><strong>Tips Kamera 720p:</strong> Gunakan opsi <em>Kamera HP</em> atau fitur <em>Zoom 2x</em> agar huruf nota terbaca tajam oleh OCR.</span>
+          <span><strong>Tips Scan:</strong> Pastikan teks struk (SPBU, BBM, Liter, Total Rp) terlihat jelas dan tidak terpotong.</span>
         </div>
 
         <div class="quick-samples-hint" @click.stop="$emit('use-sample')">
-          <span>Atau coba dengan </span>
-          <button class="sample-link">Sampel Struk Nyata →</button>
+          <span>Uji coba dengan </span>
+          <button class="sample-link">Sampel Struk (Pertamina, Shell, BP) →</button>
         </div>
       </div>
     </div>
@@ -465,6 +495,17 @@ defineExpose({
             <button class="tool-btn" title="Putar Gambar (Rotate)" @click="rotateImage">
               <RotateCw :size="16" />
               <span>Putar</span>
+            </button>
+
+            <!-- Auto Focus Paper Crop Button -->
+            <button 
+              class="tool-btn btn-crop" 
+              :disabled="isAutoCropping"
+              title="Fokus otomatis & potong ke area kertas nota" 
+              @click="handleAutoCrop"
+            >
+              <Crop :size="16" class="text-cyan" />
+              <span>{{ isAutoCropping ? 'Memotong...' : 'Fokus Kertas' }}</span>
             </button>
 
             <!-- One-Click 720p Super Sharpen Button -->
@@ -558,6 +599,8 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
+  width: 100%;
 }
 
 .hidden-input {
@@ -568,18 +611,22 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .title {
   font-size: 1.05rem;
   font-weight: 700;
   color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .text-emerald {
@@ -657,6 +704,48 @@ defineExpose({
   font-size: 0.8rem;
   color: var(--text-secondary);
   line-height: 1.4;
+}
+
+.spbu-brands-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 4px 0;
+}
+
+.brand-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.brand-pill.pertamina {
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.brand-pill.shell {
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.brand-pill.bp {
+  color: #4ade80;
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.brand-pill.vivo {
+  color: #38bdf8;
+  border-color: rgba(14, 165, 233, 0.3);
+  background: rgba(14, 165, 233, 0.1);
 }
 
 .dropzone-actions {

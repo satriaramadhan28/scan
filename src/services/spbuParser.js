@@ -53,7 +53,8 @@ export const FUEL_TYPES = [
   // BP-AKR
   { name: 'BP 92 (RON 92)', category: 'Gasoline', brand: 'BP', defaultPrice: 16130, color: '#22c55e' },
   { name: 'BP Ultimate (RON 95)', category: 'Gasoline', brand: 'BP', defaultPrice: 19330, color: '#16a34a' },
-  { name: 'BP Ultimate Diesel', category: 'Diesel', brand: 'BP', defaultPrice: 25420, color: '#15803d' },
+  { name: 'BP Diesel', category: 'Diesel', brand: 'BP', defaultPrice: 23700, color: '#15803d' },
+  { name: 'BP Ultimate Diesel', category: 'Diesel', brand: 'BP', defaultPrice: 25420, color: '#166534' },
 
   // Vivo
   { name: 'Revvo 90', category: 'Gasoline', brand: 'Vivo', defaultPrice: 14000, unavailable: true, color: '#0ea5e9' },
@@ -96,20 +97,22 @@ export function parseFuelReceiptText(rawText) {
     confidence: 85
   };
 
-  // 1. Detect SPBU Brand & Name
-  const pertaminaMatch = cleanText.match(/(?:SPBU\s*(?:NO\.?)?\s*([0-9]{2}[\.\-][0-9]{3}[\.\-][0-9]{2,3}|[0-9]{2}[\.\-][0-9]{5}|[0-9]{6,8}))/i) ||
-    cleanText.match(/(?:PERTAMINA|PATRA\s*NIAGA|PASTI\s*PAS)/i);
-  const shellMatch = cleanText.match(/(?:SHELL\s*([A-Z0-9\s\-]+))/i) || cleanText.includes('SHELL');
-  const bpMatch = cleanText.match(/(?:BP(?:\-AKR)?\s*([A-Z0-9\s\-]+))/i) || cleanText.includes('BP-AKR') || cleanText.includes('BP 92');
-  const vivoMatch = cleanText.match(/(?:VIVO\s*([A-Z0-9\s\-]+))/i) || cleanText.includes('REVVO') || cleanText.includes('VIVO');
+  // 1. Detect SPBU Brand & Name (Priority: BP, Shell, Vivo, Pertamina)
+  const hasBpKeyword = /\bBP(?:\-AKR)?\b|ANEKA\s*PETROINDO|\bBP\s*(?:92|95|ULTIMATE|DIESEL)|SPBU\s*BP|\bBP\s+[A-Z0-9]+/i.test(cleanText) ||
+    cleanText.includes('BP-AKR') || cleanText.includes('BP 92') || cleanText.includes('BP ULTIMATE') ||
+    cleanText.includes('BP DIESEL') || cleanText.includes('WWW.BP.COM') ||
+    lines.some(l => /^BP\b|^SPBU\s*BP\b/i.test(l.trim()));
 
-  if (shellMatch) {
-    result.fuelBrand = 'Shell';
-    result.spbuName = 'SPBU Shell';
-  } else if (bpMatch) {
+  const hasShellKeyword = /\bSHELL\b|PT\s*SHELL|V\-POWER|SHELL\s*SUPER|GO\s*WELL\s*WITH\s*SHELL/i.test(cleanText);
+  const hasVivoKeyword = /\bVIVO\b|PT\s*VIVO|REVVO|PRIMUS\s*PLUS/i.test(cleanText);
+
+  if (hasBpKeyword) {
     result.fuelBrand = 'BP';
     result.spbuName = 'SPBU BP-AKR';
-  } else if (vivoMatch) {
+  } else if (hasShellKeyword) {
+    result.fuelBrand = 'Shell';
+    result.spbuName = 'SPBU Shell';
+  } else if (hasVivoKeyword) {
     result.fuelBrand = 'Vivo';
     result.spbuName = 'SPBU Vivo';
   } else {
@@ -117,16 +120,24 @@ export function parseFuelReceiptText(rawText) {
     result.spbuName = 'SPBU Pertamina';
   }
 
-  // Extract Code if found (e.g. 34.123.45)
-  const spbuCodeMatch = normalizedRaw.match(/(?:SPBU\s*(?:NO\.?)?\s*[:\s]*)([0-9]{2}[\.\-][0-9]{2,3}[\.\-][0-9]{2,3}|[0-9]{2}[\.\-][0-9]{5}|[0-9]{6,8})/i);
+  // Extract Code if found (e.g. BP-GS-02, 54.601.73, or SITE ID)
+  const bpCodeMatch = normalizedRaw.match(/\b(BP\-[A-Z0-9\-]+)\b/i) || normalizedRaw.match(/(?:SITE|STATION|POS)\s*(?:ID|NO)?\s*[:\s]*([A-Z0-9\-]+)/i);
+  const pertaminaCodeMatch = normalizedRaw.match(/(?:SPBU\s*(?:NO\.?)?\s*[:\s]*)([0-9]{2}[\.\-][0-9]{2,3}[\.\-][0-9]{2,3}|[0-9]{2}[\.\-][0-9]{5}|[0-9]{6,8})/i) ||
+    normalizedRaw.match(/\b([0-9]{2}[\.\-][0-9]{2,3}[\.\-][0-9]{2,3})\b/);
 
-  // Prioritas: nama SPBU yang benar-benar tercetak di struk (mis. "SPBU SUKODONO").
-  // Baris logo yang tercetak sebagai teks pecahan (mis. "J PERTAMINA RR ee naa")
-  // dilewati karena isinya bukan nama lokasi.
+  const spbuCodeMatch = result.fuelBrand === 'BP' ? bpCodeMatch : (pertaminaCodeMatch || bpCodeMatch);
+
+  // Address lines (e.g. JL. BOULEVARD GADING SERPONG / JL. RAYA PAKAL 104)
+  const addressMatch = lines.find(l => /^JL[.\s]|JALAN\s|KAV[.\s]|RAYA\s|BLOK\s|KM[.\s]/i.test(l.trim()));
+  if (addressMatch) {
+    result.spbuAddress = addressMatch.trim();
+  }
+
+  // Prioritas: nama SPBU yang benar-benar tercetak di struk
   let printedSpbuName = '';
-  for (let i = 0; i < Math.min(6, lines.length); i++) {
+  for (let i = 0; i < Math.min(8, lines.length); i++) {
     const l = lines[i];
-    if (!/SPBU|PERTAMINA|SHELL|BP(?:\-AKR)?|VIVO|PATRA/i.test(l)) continue;
+    if (!/SPBU|PERTAMINA|SHELL|BP(?:\-AKR)?|VIVO|PATRA|ANEKA\s*PETROINDO|STATION|CITRALAND/i.test(l)) continue;
     if (/^[0-9.\-\s]+$/.test(l)) continue;
     if (looksLikeLogoNoise(l)) continue;
     printedSpbuName = l.replace(/[*=\-_#|]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -134,28 +145,31 @@ export function parseFuelReceiptText(rawText) {
   }
 
   if (printedSpbuName) {
-    // Buang kode SPBU, NPWP, dan deret angka teknis dari nama
     let cleaned = printedSpbuName
       .replace(/[0-9]{2}[\.\-][0-9]{2,3}[\.\-][0-9]{2,3}/g, '')
       .replace(/[0-9]{2}[\.\-][0-9]{5}/g, '')
       .replace(/NPWP[:\s]+[0-9.\-]+/i, '')
-      .replace(/\b[0-9]{1,2}[A-Z]{2,4}\s*[0-9]{2,}\b/g, '') // Buang kode seperti 1ML5 DO
-      .replace(/\b[A-Z0-9]{5,}\b/g, '') // Buang kode acak panjang
+      .replace(/\b[0-9]{1,2}[A-Z]{2,4}\s*[0-9]{2,}\b/g, '')
+      .replace(/\b[A-Z0-9]{5,}\b/g, '')
       .replace(/^SPBU\s*(?:NO\.?)?\s*$/i, '')
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Struk Pertamina sering mencetak logo sebagai baris teks pecahan sebelum nama
-    // aslinya (mis. "J PERTAMINA RR ee naa" di atas "SPBU MULYOSARI"). Buang bagian
-    // itu, dan potong ekor kode unik yang menempel (mis. "SPBU MULYOSARI 38B").
     cleaned = cleaned
       .replace(/^.*PERTAMINA\s*/i, (m) => (m.length < cleaned.length && /SPBU/i.test(cleaned) ? '' : m))
       .replace(/\s+\b[0-9]{1,3}[A-Z]?\b\s*$/i, '')
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Buang nama yang jelas rusak: kalau sisa hurufnya terlalu sedikit dibanding aslinya,
-    // lebih baik pakai nama brand saja daripada menampilkan teks berantakan.
+    // If BP Station format (e.g. "CITRALAND SURABAYA Station" or "BP AKR Fuels Retail")
+    if (result.fuelBrand === 'BP') {
+      if (/CITRALAND/i.test(cleaned) || /SURABAYA/i.test(cleaned)) {
+        cleaned = `SPBU BP CITRALAND SURABAYA`;
+      } else if (!/^SPBU/i.test(cleaned) && cleaned.length > 3) {
+        cleaned = `SPBU BP ${cleaned.replace(/\s*Station/i, '')}`.trim();
+      }
+    }
+
     const letters = (cleaned.match(/[A-Za-z]/g) || []).length;
     const words = cleaned.split(/\s+/).filter(Boolean).length;
     if (letters < 4 || words < 1) {
@@ -167,133 +181,157 @@ export function parseFuelReceiptText(rawText) {
 
   if (spbuCodeMatch) {
     result.spbuCode = spbuCodeMatch[1].trim();
-    if (!result.spbuName) {
-      result.spbuName = `SPBU ${result.spbuCode}`;
+    if (!result.spbuName || result.spbuName === 'SPBU Pertamina' || result.spbuName === 'SPBU BP-AKR') {
+      result.spbuName = addressMatch ? `SPBU ${result.spbuCode} (${addressMatch.trim()})` : `SPBU ${result.spbuCode}`;
     }
   }
 
-  // 2. Detect Fuel Type (Fuzzy & Regex)
-  if (/PERTALITE|P[E3]RTAL[I1]T[E3]|RON\s*90/i.test(cleanText)) {
-    result.fuelType = 'Pertalite (RON 90)';
-    result.fuelBrand = 'Pertamina';
-  } else if (/PERTAMAX\s*TURBO|P\.?\s*TURBO|RON\s*98/i.test(cleanText)) {
-    result.fuelType = 'Pertamax Turbo (RON 98)';
-    result.fuelBrand = 'Pertamina';
-  } else if (/PERTAMAX\s*GREEN/i.test(cleanText)) {
-    result.fuelType = 'Pertamax Green (RON 95)';
-    result.fuelBrand = 'Pertamina';
-  } else if (/PERTAMAX|P[E3]RTAMAX|RON\s*92/i.test(cleanText)) {
-    result.fuelType = 'Pertamax (RON 92)';
-    result.fuelBrand = 'Pertamina';
-  } else if (/DEXLITE|D[E3]XL[I1]T[E3]|CN\s*51/i.test(cleanText)) {
-    result.fuelType = 'Dexlite (CN 51)';
-    result.fuelBrand = 'Pertamina';
-  } else if (/PERTAMINA\s*DEX|P\.?\s*DEX|CN\s*53/i.test(cleanText)) {
-    result.fuelType = 'Pertamina Dex (CN 53)';
-    result.fuelBrand = 'Pertamina';
-  } else if (/SOLAR|BIOSOLAR|B10SOLAR/i.test(cleanText)) {
-    result.fuelType = 'Bio Solar / Solar Subsidi';
-    result.fuelBrand = 'Pertamina';
-  } else if (/V\-POWER\s*NITRO/i.test(cleanText)) {
-    result.fuelType = 'Shell V-Power Nitro+ (RON 98)';
-    result.fuelBrand = 'Shell';
-  } else if (/V\-POWER|V\s*POWER/i.test(cleanText)) {
-    result.fuelType = 'Shell V-Power (RON 95)';
-    result.fuelBrand = 'Shell';
-  } else if (/SUPER/i.test(cleanText) && result.fuelBrand === 'Shell') {
-    result.fuelType = 'Shell Super (RON 92)';
-    result.fuelBrand = 'Shell';
-  } else if (/BP\s*92/i.test(cleanText)) {
-    result.fuelType = 'BP 92 (RON 92)';
-    result.fuelBrand = 'BP';
-  } else if (/BP\s*ULTIMATE/i.test(cleanText)) {
-    result.fuelType = 'BP Ultimate (RON 95)';
-    result.fuelBrand = 'BP';
-  } else if (/REVVO\s*90/i.test(cleanText)) {
-    result.fuelType = 'Revvo 90';
-    result.fuelBrand = 'Vivo';
-  } else if (/REVVO\s*92/i.test(cleanText)) {
-    result.fuelType = 'Revvo 92';
-    result.fuelBrand = 'Vivo';
+  // 2. Detect Fuel Type (Brand-Aware Hierarchy)
+  if (result.fuelBrand === 'BP') {
+    if (/BP\s*ULTIMATE\s*DIESEL|ULTIMATE\s*DIESEL/i.test(cleanText)) {
+      result.fuelType = 'BP Ultimate Diesel';
+    } else if (/BP\s*DIESEL|DIESEL/i.test(cleanText)) {
+      result.fuelType = 'BP Diesel';
+    } else if (/BP\s*ULTIMATE|ULTIMATE|BP\s*95|RON\s*95/i.test(cleanText)) {
+      result.fuelType = 'BP Ultimate (RON 95)';
+    } else if (/BP\s*92|RON\s*92|92/i.test(cleanText)) {
+      result.fuelType = 'BP 92 (RON 92)';
+    } else {
+      result.fuelType = 'BP 92 (RON 92)';
+    }
+  } else if (result.fuelBrand === 'Shell') {
+    if (/NITRO|RON\s*98/i.test(cleanText)) {
+      result.fuelType = 'Shell V-Power Nitro+ (RON 98)';
+    } else if (/DIESEL/i.test(cleanText)) {
+      result.fuelType = 'Shell V-Power Diesel';
+    } else if (/V\-POWER|V\s*POWER|RON\s*95/i.test(cleanText)) {
+      result.fuelType = 'Shell V-Power (RON 95)';
+    } else if (/SUPER|RON\s*92/i.test(cleanText)) {
+      result.fuelType = 'Shell Super (RON 92)';
+    } else {
+      result.fuelType = 'Shell Super (RON 92)';
+    }
+  } else if (result.fuelBrand === 'Vivo') {
+    if (/PRIMUS|DIESEL/i.test(cleanText)) {
+      result.fuelType = 'Diesel Primus Plus';
+    } else if (/REVVO\s*95|RON\s*95|95/i.test(cleanText)) {
+      result.fuelType = 'Revvo 95';
+    } else if (/REVVO\s*90|RON\s*90|90/i.test(cleanText)) {
+      result.fuelType = 'Revvo 90';
+    } else if (/REVVO\s*92|RON\s*92|92/i.test(cleanText)) {
+      result.fuelType = 'Revvo 92';
+    } else {
+      result.fuelType = 'Revvo 92';
+    }
   } else {
-    // Default fallback
-    result.fuelType = 'Pertamax (RON 92)';
+    // Pertamina Products
+    if (/PERTALITE|P[E3]RTAL[I1]T[E3]/i.test(cleanText)) {
+      result.fuelType = 'Pertalite (RON 90)';
+    } else if (/PERTAMAX\s*TURBO|P\.?\s*TURBO/i.test(cleanText)) {
+      result.fuelType = 'Pertamax Turbo (RON 98)';
+    } else if (/PERTAMAX\s*GREEN/i.test(cleanText)) {
+      result.fuelType = 'Pertamax Green (RON 95)';
+    } else if (/PERTAMAX|P[E3]RTAMAX/i.test(cleanText)) {
+      result.fuelType = 'Pertamax (RON 92)';
+    } else if (/DEXLITE|D[E3]XL[I1]T[E3]|CN\s*51/i.test(cleanText)) {
+      result.fuelType = 'Dexlite (CN 51)';
+    } else if (/PERTAMINA\s*DEX|P\.?\s*DEX|CN\s*53/i.test(cleanText)) {
+      result.fuelType = 'Pertamina Dex (CN 53)';
+    } else if (/SOLAR|BIOSOLAR|B10SOLAR/i.test(cleanText)) {
+      result.fuelType = 'Bio Solar / Solar Subsidi';
+    } else if (/BP\s*92/i.test(cleanText)) {
+      result.fuelType = 'BP 92 (RON 92)';
+      result.fuelBrand = 'BP';
+    } else if (/BP\s*ULTIMATE/i.test(cleanText)) {
+      result.fuelType = 'BP Ultimate (RON 95)';
+      result.fuelBrand = 'BP';
+    } else if (/RON\s*90/i.test(cleanText)) {
+      result.fuelType = 'Pertalite (RON 90)';
+    } else if (/RON\s*98/i.test(cleanText)) {
+      result.fuelType = 'Pertamax Turbo (RON 98)';
+    } else if (/RON\s*92/i.test(cleanText)) {
+      result.fuelType = 'Pertamax (RON 92)';
+    } else {
+      result.fuelType = 'Pertamax (RON 92)';
+    }
   }
 
-  // 3. Extract Total Price (Total Rp / Total Bayar / Grand Total / Largest realistic Currency)
+  // Multi-Column POS Table Matcher (Standard on BP-AKR, Shell, & Retail POS)
+  // Format: [Product] [Qty/Vol] [UnitPrice] [Amount]
+  // Example on real BP receipt: "BP92 3.100 16.130 50.000" or "BP 92 19.23 13.000 250.000"
+  for (const l of lines) {
+    const tableRow = l.match(/(?:^|\s)(BP\s*92|BP92|BP\s*95|BP95|BP\s*ULTIMATE|BP\s*DIESEL|PERTAMAX|PERTALITE|DEXLITE|SOLAR|V\-POWER|SHELL\s*SUPER|REVVO\s*9[025])\s+([0-9]{1,3}[\.,][0-9]{2,3})\s+([0-9]{1,2}[\.,][0-9]{3}|[0-9]{4,5})\s+([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i);
+    if (tableRow) {
+      const prodName = tableRow[1].toUpperCase().replace(/\s+/g, '');
+      const volVal = parseIndonesianFloat(tableRow[2]);
+      const priceVal = parseIndonesianCurrency(tableRow[3]);
+      const totalVal = parseIndonesianCurrency(tableRow[4]);
+
+      if (volVal > 0.1 && volVal < 500) result.volumeLiters = parseFloat(volVal.toFixed(2));
+      if (priceVal >= 5000 && priceVal <= 40000) result.pricePerLiter = priceVal;
+      if (totalVal >= 1000 && totalVal <= 5000000) result.totalPrice = totalVal;
+
+      if (prodName.startsWith('BP')) {
+        result.fuelBrand = 'BP';
+        if (prodName.includes('92')) result.fuelType = 'BP 92 (RON 92)';
+        else if (prodName.includes('95') || prodName.includes('ULTIMATE')) result.fuelType = 'BP Ultimate (RON 95)';
+        else if (prodName.includes('DIESEL')) result.fuelType = 'BP Ultimate Diesel';
+      }
+      break;
+    }
+  }
+
+  // 3. Extract Total Price (Total Rp / Amount / Total Bayar / Grand Total)
   const totalPatterns = [
-    /(?:TOTAL[\s\-_]*HARGA|TOTAL[\s\-_]*RUPIAH|TOTAL[\s\-_]*BAYAR|TOTAL[\s\-_]*RP|TOTAL[\s\-_]*PENJUALAN|GRAND[\s\-_]*TOTAL|JUMLAH[\s\-_]*RP)[\s:=]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+)/i,
-    /(?:TOTAL)[\s:=]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+)/i,
-    /(?:BAYAR|TUNAI|CASH|QRIS)[\s:=]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+)/i,
+    /(?:TOTAL[\s\-_.]*HARGA|TOTAL[\s\-_.]*RUPIAH|TOTAL[\s\-_.]*BAYAR|TOTAL[\s\-_.]*RP|TOTAL[\s\-_.]*PENJUALAN|GRAND[\s\-_.]*TOTAL|JUMLAH[\s\-_.]*RP|TOTAL[\s\-_.]*AMOUNT|SALE[\s\-_.]*AMOUNT|TOTAL[\s\-_.]*|AMOUNT)[\s:=.]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i,
+    /(?:EDC\s*BCA|EDC\s*MANDIRI|EDC|BAYAR|TUNAI|CASH|QRIS)[\s:=.]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i,
     /RP\.?\s*([0-9]{2,3}[\.,][0-9]{3})/i
   ];
 
-  for (const pattern of totalPatterns) {
-    const match = normalizedRaw.match(pattern);
-    if (match) {
-      const val = parseIndonesianCurrency(match[1]);
-      if (val >= 1000 && val <= 5000000) {
-        result.totalPrice = val;
-        break;
-      }
-    }
-  }
-
-  // Fallback scan for currency-formatted numbers (e.g. 50.000, 100.000, 250.000, 350.000)
   if (!result.totalPrice) {
-    const currencyMatches = normalizedRaw.match(/\b([1-9][0-9]{1,2}(?:\.[0-9]{3})+)\b/g);
-    if (currencyMatches && currencyMatches.length > 0) {
-      const parsedNums = currencyMatches
-        .map(parseIndonesianCurrency)
-        .filter(n => n >= 15000 && n <= 3000000);
-      if (parsedNums.length > 0) {
-        const uniqueNums = [...new Set(parsedNums)];
-        // Jika cuma satu angka unik -> itu jelas total; kalau banyak, cek pengisian si nota
-        result.totalPrice = uniqueNums.length === 1 ? uniqueNums[0] : Math.max(...uniqueNums);
+    for (const pattern of totalPatterns) {
+      const match = normalizedRaw.match(pattern);
+      if (match) {
+        const val = parseIndonesianCurrency(match[1]);
+        if (val >= 1000 && val <= 5000000) {
+          result.totalPrice = val;
+          break;
+        }
       }
     }
   }
 
-  // 3. Extract Total Price
-  // Cara kerja: kumpulkan SEMUA kandidat total dari baris berlabel, buang baris yang
-  // sebenarnya bukan nilai bayar (subsidi pemerintah, harga per liter, volume, PPN,
-  // kembalian), lalu pilih nilai yang PALING BANYAK disebut nota.
-  // Nota Indonesia umumnya menulis total bayar 2-3 kali (Total Penjualan, Dibayar
-  // Konsumen, Cash), jadi angka yang paling sering muncul hampir selalu totalnya —
-  // dan angka seperti "subsidi Rp 22.420" otomatis kalah suara.
-  const totalCandidates = collectTotalCandidates(lines);
-  if (totalCandidates.length > 0) {
-    result.totalPrice = pickBestTotal(totalCandidates);
-    result.totalCandidates = totalCandidates;
-  }
-
-  // Cadangan: baris pengisian Shell/BP/Vivo
-  // Contoh Shell: "4.566L x 10950Rp/L"
-  // Contoh Pertamina: "3.13 Ltr x Rp 15.950"
-  if (!result.totalPrice || result.totalPrice < 1000) {
-    // Pola Shell/Internasional: [Volume]L x [Harga]
-    const shellRow = normalizedRaw.match(/([0-9]{1,3}[,\.][0-9]{2,3})\s*[Ll]\s*[Xx\*=]\s*([0-9]{4,6})\s*RP/i) ||
-                     normalizedRaw.match(/([0-9]{1,3}[,\.][0-9]{2,3})\s*[Ll]\s*[Xx\*=]\s*RP?\.?\s*([0-9]{1,2}[.,][0-9]{3})/i);
-    
-    if (shellRow) {
-      const vol = parseIndonesianFloat(shellRow[1]);
-      const price = shellRow[2].includes('.') || shellRow[2].includes(',') 
-        ? parseIndonesianCurrency(shellRow[2]) 
-        : parseInt(shellRow[2], 10);
-
-      if (vol > 0.1 && vol < 500 && price >= 2000 && price <= 100000) {
-        if (!result.volumeLiters) result.volumeLiters = parseFloat(vol.toFixed(3));
-        if (!result.pricePerLiter) result.pricePerLiter = price;
-        result.totalPrice = Math.round(vol * price);
+  // Line-by-line labeled search for Amount / Total
+  if (!result.totalPrice) {
+    const totalCandidates = collectTotalCandidates(lines);
+    if (totalCandidates.length > 0) {
+      const bestTotal = pickBestTotal(totalCandidates);
+      if (bestTotal && bestTotal >= 1000) {
+        result.totalPrice = bestTotal;
+        result.totalCandidates = totalCandidates;
       }
     }
   }
 
-  // 4. Extract Price Per Liter (Harga / Liter)
+  // Direct line search for "Amount 25000" / "Amount: 25.000" / "Total 25000"
+  if (!result.totalPrice) {
+    for (const l of lines) {
+      const amtMatch = l.match(/(?:AMOUNT|TOTAL|SALE|JUMLAH|BAYAR)[\s:=]+RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i);
+      if (amtMatch && !isNonTotalLine(l)) {
+        const val = parseIndonesianCurrency(amtMatch[1]);
+        if (val >= 1000 && val <= 5000000) {
+          result.totalPrice = val;
+          break;
+        }
+      }
+    }
+  }
+
+  // 4. Extract Price Per Liter (Unit Price / Harga / Liter)
   const pricePerLiterPatterns = [
-    /(?:HARGA[A-Za-z\s\/]*LITER|HARGA[A-Za-z\s\/]*L|PRICE[A-Za-z\s\/]*L|HARGA\/LTR|HRG\/LITER|PRICE)[^\d]*(?:RP\.?\s*)?([0-9]{1,2}[\.,][0-9]{3})/i,
-    /(?:RP\.?[\s]*)?([0-9]{1,2}[\.,][0-9]{3})\s*[\/]\s*(?:L|LTR|LITER)/i,
-    /@[\s]*([0-9]{1,2}[\.,][0-9]{3})/i,
+    /(?:UNIT[\s\-_]*PRICE|HARGA[A-Za-z\s\/]*LITER|HARGA[A-Za-z\s\/]*L|PRICE[A-Za-z\s\/]*L|HARGA\/LTR|HRG\/LITER|PRICE)[^\d]*(?:RP\.?\s*)?([0-9]{1,2}[\.,][0-9]{3}|[0-9]{4,5})/i,
+    /(?:RP\.?[\s]*)?([0-9]{1,2}[\.,][0-9]{3}|[0-9]{4,5})\s*[\/]\s*(?:L|LTR|LITER)/i,
+    /@[\s]*([0-9]{1,2}[\.,][0-9]{3}|[0-9]{4,5})/i,
     /([0-9]{1,2}[\.,][0-9]{3})\b.*(?:LITER|LTR|L)\b/i
   ];
 
@@ -308,28 +346,17 @@ export function parseFuelReceiptText(rawText) {
     }
   }
 
-  // Catatan: harga resmi TIDAK dipakai sebagai pengganti harga nota.
-  // Kalau harga per liter tidak terbaca, biarkan kosong (0) agar form menandainya
-  // "perlu diperiksa" — lebih baik kosong daripada angka karangan yang salah ACC.
-  if (!result.pricePerLiter && result.fuelType) {
-    result.needsReview = true;
-    result.reviewFields = [...(result.reviewFields || []), 'pricePerLiter'];
-  }
-
-  // 5. Extract Volume (Liter / Vol / Qty)
-  // Baris berlabel "Volume : 4,60 Liter" didahulukan supaya angka lain di nota
-  // (jumlah bayar, nomor struk) tidak dianggap volume.
-  // UPDATE: Menangani label "(L)" yang sering muncul di nota Pertamax (Volume : (L) 3.13)
+  // 5. Extract Volume (Volume / Qty / Liter)
   const labeledVolume = lines.map(l => l.match(/(?:VOLUME|VOL|QTY|JUMLAH\s*LITER|LITER|TOTAL\s*VOL)\s*[:=]?\s*(?:\([A-Z0-9]\)\s*)?([0-9]{1,3}[,.]\s?[0-9]{1,3})/i)).find(Boolean);
   if (labeledVolume) {
     const val = parseIndonesianFloat(labeledVolume[1]);
-    if (val > 0.5 && val < 500) result.volumeLiters = parseFloat(val.toFixed(2));
+    if (val > 0.1 && val < 500) result.volumeLiters = parseFloat(val.toFixed(2));
   }
 
   if (!result.volumeLiters) {
     const volumePatterns = [
+      /(?:VOLUME|VOL|QTY|LITER)[\s:=]*(?:\([^)]*\))?\s*([0-9]{1,3}[,\.][0-9]{1,3})/i,
       /([0-9]{1,3}[,\.][0-9]{2,3})\s*(?:LTR|LITER|L)\b/i,
-      /(?:VOLUME[A-Za-z\s]*|QTY|LITER|VOL)[\s:=]*(?:\([^)]*\))?\s*([0-9]{1,3}[,\.][0-9]{1,3})/i,
       /\b([0-9]{1,3}[,.]\s?[0-9]{2,3})\s*(?:L|LTR|LITER)\b/i
     ];
 
@@ -337,7 +364,7 @@ export function parseFuelReceiptText(rawText) {
       const match = normalizedRaw.match(pattern);
       if (match) {
         const val = parseIndonesianFloat(match[1]);
-        if (val > 0.5 && val < 500) {
+        if (val > 0.1 && val < 500) {
           result.volumeLiters = parseFloat(val.toFixed(2));
           break;
         }
@@ -360,8 +387,6 @@ export function parseFuelReceiptText(rawText) {
     }
   }
 
-  // JANGAN mengarang nilai default (dulu: 10.00 L / Rp 129.500). Kalau nota tidak
-  // terbaca, biarkan kosong dan tandai untuk diperiksa manual.
   if (!result.totalPrice || !result.volumeLiters || !result.pricePerLiter) {
     result.needsReview = true;
     result.reviewFields = [...new Set([
@@ -372,10 +397,7 @@ export function parseFuelReceiptText(rawText) {
     ])];
   }
 
-  // 6. Extract Date & Time
-  // Struk menulis tanggal + jam berdampingan (mis. "24/09/2026 08:08:13")
-  // atau dengan label "Waktu: 22/09/2026 06:03:00"
-  // UPDATE: Regex Jam lebih fleksibel menangani kesalahan OCR (mis. 0 terbaca C atau O)
+  // 6. Extract Date & Time (e.g. 23/04/2020 10:49)
   const timeRegexPart = `([0-2]?[0-9A-Z]:[0-5][0-9A-Z](?::[0-5][0-9A-Z])?)`;
   const dateTimeMatch = normalizedRaw.match(new RegExp(`([0-3]?[0-9][\\/\\-\\.][0-1]?[0-9][\\/\\-\\.](?:20)?[0-9]{2,4})\\s+${timeRegexPart}`, 'i'));
 
@@ -383,7 +405,6 @@ export function parseFuelReceiptText(rawText) {
     result.date = normalizeDate(dateTimeMatch[1]);
     result.time = normalizeTime(dateTimeMatch[2]);
   } else {
-    // Cari tanggal secara mandiri
     const dateMatch = normalizedRaw.match(/([0-3]?[0-9][\/\-\.][0-1]?[0-9][\/\-\.](?:20)?[0-9]{2,4})/) ||
       normalizedRaw.match(/(?:20[0-9]{2,4}[\/\-\.][0-1]?[0-9][\/\-\.][0-3]?[0-9])/);
     
@@ -395,16 +416,14 @@ export function parseFuelReceiptText(rawText) {
       result.reviewFields = [...new Set([...(result.reviewFields || []), 'date'])];
     }
 
-    // Cari jam secara mandiri (terutama jika ada label Waktu/Jam)
     const timeMatch = normalizedRaw.match(new RegExp(`(?:WAKTU|JAM|TIME|PADA)[\\s:=]*${timeRegexPart}`, 'i')) ||
                       normalizedRaw.match(new RegExp(timeRegexPart, 'i'));
     
     result.time = timeMatch ? normalizeTime(timeMatch[1]) : '';
   }
 
-  // 7. Extract Pump & Receipt No
-  // UPDATE: Tambahkan filter pembersih karakter non-digit untuk pompa agar lebih akurat
-  const pumpMatch = normalizedRaw.match(/(?:PULAU[A-Za-z\s\/]*POMPA|POMPA|PUMP|PULAU\/POMPA|PULAU)[\s:=#\.]*([0-9lLiIoO]{1,3})/i);
+  // 7. Extract Pump & Receipt No (e.g. Receipt No. : 009504, Pump No. 02)
+  const pumpMatch = normalizedRaw.match(/(?:PULAU[A-Za-z\s\/]*POMPA|POMPA|PUMP(?:\s*NO\.?)?|PULAU\/POMPA|PULAU)[\s:=#\.]*([0-9lLiIoO]{1,3})/i);
   if (pumpMatch) {
     result.pumpNo = cleanOcrNumber(pumpMatch[1]).padStart(2, '0');
   }
@@ -412,18 +431,12 @@ export function parseFuelReceiptText(rawText) {
   if (nozzleMatch) {
     result.nozzleNo = cleanOcrNumber(nozzleMatch[1]).padStart(2, '0');
   }
-  if (nozzleMatch) {
-    result.nozzleNo = nozzleMatch[1].replace(/[lLiIoO]/g, m => ({ l: '1', L: '1', I: '1', i: '1', o: '0', O: '0' }[m])).padStart(2, '0');
-  }
 
-  const receiptMatch = normalizedRaw.match(/(?:NO\.?\s*(?:STRUK|TRANSAKSI|TRX|NOTA|RECEIPT|INVOICE|REF|TRANS))[\s:=#]*([A-Z0-9\-\/]{3,})/i);
+  const receiptMatch = normalizedRaw.match(/(?:(?:NO\.?\s*)?(?:STRUK|TRANSAKSI|TRX|NOTA|RECEIPT|INVOICE|REF|TRANS|BILL|DOC)(?:\s*(?:NO|NUMBER)\.?)?)[\s:=#]*([A-Z0-9\-\/]{3,})/i);
   if (receiptMatch) {
     result.receiptNo = receiptMatch[1].trim();
   } else {
-    // Banyak struk (mis. Pertamina) hanya mencetak "STRUK : 5401225" atau deret
-    // 6-8 digit di sebelah kiri nota. Ambil angka itu apa adanya — jangan dikarang,
-    // karena nomor struk dipakai untuk rekonsiliasi.
-    const strukLabel = normalizedRaw.match(/STRUK\s*[:#]?\s*([A-Z0-9\-\/]{3,})/i);
+    const strukLabel = normalizedRaw.match(/(?:STRUK|RECEIPT|INVOICE)\s*[:#]?\s*([A-Z0-9\-\/]{3,})/i);
     const leftColumnDigit = lines.slice(0, 8).map(l => (l.match(/^([0-9]{6,10})\b/) || [])[1]).find(Boolean);
     result.receiptNo = (strukLabel ? strukLabel[1] : leftColumnDigit) || '';
     if (!result.receiptNo) {
@@ -432,14 +445,28 @@ export function parseFuelReceiptText(rawText) {
     }
   }
 
-  // 8. Payment Method
-  if (/QRIS|GOPAY|OVO|DANA|SHOPEEPAY/i.test(cleanText)) {
+  // 8. Shift / Operator / Attendant & Plate Number
+  const attendantMatch = normalizedRaw.match(/(?:ATTENDANT|OPERATOR|KASIR|CASHIER|PETUGAS)[\s:=]*([A-Za-z0-9\s]{2,25})/i);
+  if (attendantMatch) {
+    result.shift = attendantMatch[1].trim();
+  }
+
+  const plateMatch = normalizedRaw.match(/(?:NOMORKENDARAAN|NO\.?\s*POLISI|NOPOL|NO\.?\s*PLAT|VEHICLE\s*NO)[\s:=]*([A-Z0-9\s]{4,12})/i);
+  if (plateMatch) {
+    const rawPlate = plateMatch[1].replace(/[.\-_]/g, '').trim();
+    if (rawPlate.length >= 3 && !/NOT\s*ENTERED/i.test(rawPlate)) {
+      result.plateNumber = rawPlate;
+    }
+  }
+
+  // 9. Payment Method
+  if (/EDC\s*BCA|BCA\s*DEBIT|MANDIRI\s*DEBIT|BRI\s*DEBIT|DEBIT|EDC/i.test(cleanText)) {
+    result.paymentMethod = /EDC\s*BCA/i.test(cleanText) ? 'Kartu Debit' : 'Kartu Debit';
+  } else if (/QRIS|GOPAY|OVO|DANA|SHOPEEPAY/i.test(cleanText)) {
     result.paymentMethod = 'QRIS / E-Wallet';
   } else if (/MYPERTAMINA|MY\s*PERTAMINA/i.test(cleanText)) {
     result.paymentMethod = 'MyPertamina';
-  } else if (/DEBIT|KARTU\s*DEBIT|BCA|MANDIRI|BRI|BNI/i.test(cleanText)) {
-    result.paymentMethod = 'Kartu Debit';
-  } else if (/KREDIT|CREDIT/i.test(cleanText)) {
+  } else if (/KREDIT|CREDIT|VISA|MASTERCARD/i.test(cleanText)) {
     result.paymentMethod = 'Kartu Kredit';
   } else {
     result.paymentMethod = 'Tunai (Cash)';
@@ -450,14 +477,12 @@ export function parseFuelReceiptText(rawText) {
 
 function normalizeTime(rawTime) {
   if (!rawTime) return '';
-  // Perbaiki kesalahan OCR umum pada angka jam (mis. C terbaca 0, I terbaca 1)
   let clean = String(rawTime).toUpperCase()
     .replace(/[OQC]/g, '0')
     .replace(/[ILl]/g, '1')
     .replace(/S/g, '5')
     .replace(/B/g, '8');
   
-  // Ambil format HH:mm
   const match = clean.match(/([0-2][0-9]):([0-5][0-9])/);
   if (match) {
     return `${match[1]}:${match[2]}`;
@@ -465,9 +490,6 @@ function normalizeTime(rawTime) {
   return clean.slice(0, 5);
 }
 
-/**
- * Fungsi pembantu untuk membersihkan angka dari kesalahan OCR
- */
 function cleanOcrNumber(str) {
   if (!str) return '';
   return str.replace(/[OQC]/g, '0')
@@ -477,14 +499,10 @@ function cleanOcrNumber(str) {
             .replace(/[^\d]/g, '');
 }
 
-/**
- * Label yang menandakan baris tersebut memuat NILAI YANG DIBAYARKAN.
- * Ditulis dari yang paling kuat ke paling lemah.
- */
 const TOTAL_LABELS = [
   { re: /DIB[AE]YAR\s*KONSUMEN|TOTAL\s*PENJUALAN|TOTAL\s*PEMBELIAN|TOTAL\s*INVOICE/i, weight: 10 },
-  { re: /SALE\s*TOTAL|TOTAL\s*HARGA|TOTAL\s*BAYAR|TOTAL\s*RP|TOTAL\s*RUPIAH|GRAND\s*TOTAL|JUMLAH\s*BAYAR|JUMLAH\s*RP/i, weight: 9 },
-  { re: /^\s*TOTAL\b/i, weight: 8 },
+  { re: /SALE\s*TOTAL|TOTAL\s*HARGA|TOTAL\s*BAYAR|TOTAL\s*RP|TOTAL\s*RUPIAH|GRAND\s*TOTAL|JUMLAH\s*BAYAR|JUMLAH\s*RP|TOTAL\s*AMOUNT|SALE\s*AMOUNT/i, weight: 9 },
+  { re: /^\s*TOTAL\b|\bAMOUNT\b/i, weight: 8 },
   { re: /\bNOMINAL\b/i, weight: 7 },
   { re: /\bJUMLAH\b/i, weight: 6 },
   { re: /\bTUNAI\b|\bCASH\b/i, weight: 5 },

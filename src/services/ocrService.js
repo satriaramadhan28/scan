@@ -114,6 +114,84 @@ export async function preprocessReceiptImage(imageSource, options = { contrast: 
 }
 
 /**
+ * Smart Receipt Auto-Crop:
+ * Mendeteksi area kertas putih struk di tengah foto dan membuang latar belakang (tangan, lantai, baju)
+ * agar teks nota menjadi lebih besar dan terbaca 100% oleh OCR.
+ */
+export async function autoCropReceiptImage(imageSource) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+        const w = canvas.width;
+        const h = canvas.height;
+
+        let minX = w, maxX = 0, minY = h, maxY = 0;
+        let count = 0;
+        const step = Math.max(1, Math.floor(Math.min(w, h) / 250));
+
+        for (let y = 0; y < h; y += step) {
+          for (let x = 0; x < w; x += step) {
+            const idx = (y * w + x) * 4;
+            const r = data[idx];
+            const g = data[idx + 1];
+            const b = data[idx + 2];
+            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+            const maxChan = Math.max(r, g, b);
+            const minChan = Math.min(r, g, b);
+            const isPaperLike = lum > 135 && (maxChan - minChan) < 45;
+
+            if (isPaperLike) {
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+              count++;
+            }
+          }
+        }
+
+        const totalSampled = (w / step) * (h / step);
+        const paperRatio = count / totalSampled;
+
+        if (paperRatio >= 0.05 && paperRatio <= 0.92 && maxX > minX + 60 && maxY > minY + 60) {
+          const padX = Math.round((maxX - minX) * 0.04);
+          const padY = Math.round((maxY - minY) * 0.04);
+          const cropX = Math.max(0, minX - padX);
+          const cropY = Math.max(0, minY - padY);
+          const cropW = Math.min(w - cropX, (maxX - minX) + padX * 2);
+          const cropH = Math.min(h - cropY, (maxY - minY) + padY * 2);
+
+          const cropCanvas = document.createElement('canvas');
+          const cropCtx = cropCanvas.getContext('2d');
+          cropCanvas.width = cropW;
+          cropCanvas.height = cropH;
+          cropCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+          resolve(cropCanvas.toDataURL('image/jpeg', 0.95));
+          return;
+        }
+
+        resolve(typeof imageSource === 'string' ? imageSource : canvas.toDataURL('image/jpeg', 0.95));
+      } catch {
+        resolve(typeof imageSource === 'string' ? imageSource : '');
+      }
+    };
+    img.onerror = () => resolve(typeof imageSource === 'string' ? imageSource : '');
+    img.src = typeof imageSource === 'string' ? imageSource : URL.createObjectURL(imageSource);
+  });
+}
+
+/**
  * Perform Client-side Tesseract OCR on receipt image
  */
 export async function performReceiptOCR(imageInput, onProgress = () => { }, customOptions = {}) {

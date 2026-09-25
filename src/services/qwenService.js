@@ -163,29 +163,41 @@ Analisis gambar struk ini dengan SANGAT TELITI. Ekstrak data SECARA HARFIAH/PERS
    PENTING: baris berita pembelian / nominal biasanya memuat angka yang benar-benar dibayarkan —
    pakai angka itu kalau lebih pasti daripada baris TOTAL.
 
-Cara memisahkan angka (sangat penting, ini sumber utama kesalahan):
-- Volume selalu punya 2 angka desimal. Contoh: 3.13 atau 3,13 -> 3.13
-- Harga per liter selalu 4-6 digit sebelum desimal. Contoh: Rp 15.950 -> 15950
-- Total bayar biasanya angka bulat/penuh. Contoh: Rp 50.000 -> 50000
-- Kalau volume x harga per liter TIDAK mendekati total, berarti salah satu angka salah baca:
-  baca ulang gambarnya dan perbaiki sebelum menjawab.
-- Jangan memakai harga yang umum di pasaran; pakai HANYA angka yang tercetak di struk ini.
+>> PANDUAN PENTING KARAKTERISTIK BRAND SPBU (JANGAN TERTUKAR!):
+1. **PERTAMINA** (PT Pertamina Patra Niaga / Pasti Pas / Pasti Prima):
+   - Kode SPBU format angka bertitik: 31.xxx.xx, 34.xxx.xx, 54.xxx.xx.
+   - Produk: Pertalite (RON 90), Pertamax (RON 92), Pertamax Green (RON 95), Pertamax Turbo (RON 98), Dexlite (CN 51), Pertamina Dex (CN 53), Bio Solar.
+   - Catatan: Baris "Subsidi Pemerintah" / "Kompensasi" BUKAN total bayar konsumen.
+2. **BP / BP-AKR** (PT Aneka Petroindo Raya / BP-AKR / bp):
+   - Header: "PT ANEKA PETROINDO RAYA", "SPBU BP-AKR [Lokasi]", logo bp bunga hijau/kuning.
+   - Footer: "TERIMA KASIH TELAH MENGISI DI BP", "www.bp.com".
+   - Kode SPBU: "BP-GS-02", "BP-CTR-01", "Site Code", "POS ID".
+   - Produk: BP 92 (RON 92), BP Ultimate (RON 95), BP Ultimate Diesel, BP Diesel.
+   - PENTING: Jika ada kata "BP 92", "BP Ultimate", atau header BP-AKR, brand HARUS "BP" (BUKAN Pertamina!).
+3. **SHELL** (PT Shell Indonesia / Go Well with Shell):
+   - Header: "PT SHELL INDONESIA", "SHELL [Lokasi]", logo kerang Shell.
+   - Kode SPBU: "Site ID" (cth: ID001234).
+   - Produk: Shell Super (RON 92), Shell V-Power (RON 95), Shell V-Power Nitro+ (RON 98), Shell V-Power Diesel.
+   - PENTING: Jika ada "V-Power" atau "Shell Super", brand HARUS "Shell".
+4. **VIVO** (PT Vivo Energy Indonesia):
+   - Header: "PT VIVO ENERGY INDONESIA", "SPBU VIVO".
+   - Produk: Revvo 90, Revvo 92, Revvo 95, Diesel Primus Plus.
 
 Format JSON yang wajib dihasilkan:
 {
-  "spbuName": "Salin NAMA SPBU atau Lokasi persis seperti di bagian atas struk (cth: SPBU SUKODONO)",
-  "spbuCode": "Nomor kode SPBU jika ada (cth: 34.123.45)",
-  "fuelType": "Jenis BBM (cth: Pertalite (RON 90), Pertamax (RON 92), Dexlite, Shell V-Power, BP 92)",
-  "fuelBrand": "Pertamina / Shell / BP / Vivo",
+  "spbuName": "Salin NAMA SPBU persis seperti di struk (cth: SPBU BP-AKR GADING SERPONG / SPBU 34.12345 / SHELL)",
+  "spbuCode": "Nomor kode SPBU jika ada (cth: BP-GS-02 / 34.123.45 / Site ID)",
+  "fuelType": "Jenis BBM (cth: BP 92 (RON 92), BP Ultimate (RON 95), BP Ultimate Diesel, Pertalite (RON 90), Pertamax (RON 92), Dexlite, Shell V-Power, Revvo 92)",
+  "fuelBrand": "Pertamina / Shell / BP / Vivo (perhatikan logo/teks BP-AKR, PT ANEKA PETROINDO RAYA, bp, Shell, Vivo)",
   "volumeLiters": 3.13,
   "pricePerLiter": 15950,
   "totalPrice": 50000,
   "paymentMethod": "Tunai (Cash) / QRIS / MyPertamina / Kartu Debit / Kartu Kredit",
   "date": "Tanggal, format wajib YYYY-MM-DD (contoh: 2026-09-24)",
   "time": "Jam pengisian (contoh: 08:08)",
-  "pumpNo": "Angka/Nomor Pompa / Pulau Pompa",
-  "nozzleNo": "Angka/Nomor Nozzle/Selang",
-  "receiptNo": "Nomor Struk / No. Trans / nomor di sisi kiri struk",
+  "pumpNo": "Angka/Nomor Pompa / Pulau Pompa / Pump",
+  "nozzleNo": "Angka/Nomor Nozzle / Selang",
+  "receiptNo": "Nomor Struk / No. Trans / No. Trx / Receipt No",
   "rawTextSummary": "Ketik ulang berurut baris teks penting di struk beserta angkanya"
 }
 

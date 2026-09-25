@@ -505,15 +505,16 @@ function onKeyUpdated(info) {
 /* 2-Column Scanner View */
 .scanner-layout {
   display: grid;
-  grid-template-columns: 1fr 1.25fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
   gap: 24px;
   align-items: start;
+  width: 100%;
 }
 
-.scanner-col-left {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.scanner-col-left,
+.scanner-col-right {
+  min-width: 0;
+  width: 100%;
 }
 
 .raw-text-card {
@@ -522,6 +523,7 @@ function onKeyUpdated(info) {
   flex-direction: column;
   gap: 10px;
   background: rgba(13, 21, 39, 0.6);
+  min-width: 0;
 }
 
 .raw-text-header {
@@ -543,6 +545,7 @@ function onKeyUpdated(info) {
   overflow-y: auto;
   white-space: pre-wrap;
   border: 1px solid var(--border-color);
+  word-break: break-all;
 }
 
 @media (max-width: 960px) {

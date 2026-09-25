@@ -183,6 +183,93 @@ TOTAL RP  : RP 250.000
 BAYAR     : QRIS GOPAY
 
 TERIMA KASIH TELAH MENGISI DI BP`
+  },
+  {
+    id: 'sample_bp_ultimate',
+    title: 'Struk BP - BP Ultimate 95',
+    subtitle: 'PT Aneka Petroindo Raya - BP Ciater',
+    brand: 'BP',
+    badgeColor: '#15803d',
+    data: {
+      spbuName: 'SPBU BP-AKR CIATER RAYA',
+      spbuCode: 'BP-CTR-01',
+      spbuAddress: 'JL. CIATER RAYA BSD TANGERANG SELATAN',
+      fuelType: 'BP Ultimate (RON 95)',
+      fuelBrand: 'BP',
+      volumeLiters: 20.00,
+      pricePerLiter: 19330,
+      totalPrice: 386600,
+      paymentMethod: 'Kartu Debit',
+      date: '2026-09-23',
+      time: '14:20',
+      pumpNo: '03',
+      nozzleNo: '01',
+      receiptNo: 'BP-994102',
+      shift: 'DEDI K',
+      plateNumber: 'B 2234 KLM',
+      odometer: 31200,
+      notes: 'Pengisian BP Ultimate operasional kantor'
+    },
+    rawText: `PT ANEKA PETROINDO RAYA
+SPBU BP-AKR CIATER RAYA
+JL. CIATER RAYA BSD TANGERANG SELATAN
+
+NO. TRANSAKSI : BP-994102
+TANGGAL       : 23/09/2026 14:20:12
+NO. POMPA     : 03
+OPERATOR      : DEDI K
+
+GRADE         : BP ULTIMATE (RON 95)
+VOLUME        : 20.00 L
+UNIT PRICE    : RP 19.330
+TOTAL AMOUNT  : RP 386.600
+PAYMENT       : BCA DEBIT
+
+TERIMA KASIH TELAH MENGISI DI BP-AKR`
+  },
+  {
+    id: 'sample_bp_citraland',
+    title: 'Struk BP - BP 92 Citraland Surabaya',
+    subtitle: 'BP AKR Fuels Retail - Citraland Surabaya',
+    brand: 'BP',
+    badgeColor: '#16a34a',
+    data: {
+      spbuName: 'SPBU BP CITRALAND SURABAYA',
+      spbuCode: 'BP-AKR',
+      spbuAddress: 'CITRALAND SURABAYA',
+      fuelType: 'BP 92 (RON 92)',
+      fuelBrand: 'BP',
+      volumeLiters: 3.10,
+      pricePerLiter: 16130,
+      totalPrice: 50000,
+      paymentMethod: 'Kartu Debit',
+      date: '2026-09-22',
+      time: '07:20',
+      pumpNo: '',
+      nozzleNo: '',
+      receiptNo: 'INV/JI015/26265967001',
+      shift: 'Venna',
+      plateNumber: '',
+      notes: 'Pengisian BP 92 EDC BCA'
+    },
+    rawText: `bp       CITRALAND SURABAYA
+[AKR]    Station
+BP AKR Fuels Retail
+
+Invoice No:INV/JI015/26265967001
+Date: 2026-09-22 07:20:10
+Attendant: Venna
+NomorKendaraan: ...............
+
+Product    Qty    Price    Amount
+---------------------------------
+BP92       3.100  16.130   50.000
+---------------------------------
+Total.                   Rp 50.000
+EDC BCA                  Rp 50.000
+---------------------------------
+Customer Service: WA081119900606
+Instagram: @bp_idn`
   }
 ];
 

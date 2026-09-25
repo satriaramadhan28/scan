@@ -190,6 +190,22 @@ function clearReviewedFlag() {
   }
 }
 
+// Brand selection for quick fuel chips
+const BRANDS = ['Semua', 'Pertamina', 'Shell', 'BP', 'Vivo'];
+const selectedBrandTab = ref('Semua');
+
+const displayedFuels = computed(() => {
+  if (selectedBrandTab.value === 'Semua') return fuelList.value;
+  return fuelList.value.filter(f => f.brand === selectedBrandTab.value);
+});
+
+// Watch fuel selection to automatically activate the matching brand tab
+watch(() => form.value.fuelBrand, (newBrand) => {
+  if (newBrand && BRANDS.includes(newBrand)) {
+    selectedBrandTab.value = newBrand;
+  }
+});
+
 function selectUser(user) {
   form.value.employeeName = user.name;
   form.value.department = user.department || 'Operasional';
@@ -271,7 +287,7 @@ const fuelBadgeColor = computed(() => {
         <Fuel :size="22" :style="{ color: fuelBadgeColor }" />
         <div>
           <h2 class="form-title">Rincian Hasil Deteksi Nota</h2>
-          <p class="form-subtitle">Periksa atau edit informasi yang diekstrak dari struk</p>
+          <p class="form-subtitle">Periksa atau edit informasi yang diekstrak dari struk (Pertamina, Shell, BP, Vivo)</p>
         </div>
       </div>
 
@@ -354,20 +370,35 @@ const fuelBadgeColor = computed(() => {
       </div>
     </div>
 
-    <!-- Quick Fuel Type Selector Chips -->
-    <div class="quick-fuels">
-      <span class="quick-label">Pilihan Cepat BBM:</span>
+    <!-- Quick Fuel Type Selector Chips with Brand Tabs -->
+    <div class="quick-fuels-section">
+      <div class="quick-fuels-header">
+        <span class="quick-label">Pilihan Cepat BBM:</span>
+        <div class="brand-filter-tabs">
+          <button 
+            v-for="b in BRANDS" 
+            :key="b" 
+            class="brand-tab-btn" 
+            :class="{ active: selectedBrandTab === b }"
+            @click="selectedBrandTab = b"
+          >
+            {{ b }}
+          </button>
+        </div>
+      </div>
+
       <div class="fuel-chips-scroll">
         <button
-          v-for="fuel in fuelList.slice(0, 8)"
+          v-for="fuel in displayedFuels"
           :key="fuel.name"
           class="fuel-chip"
           :class="{ active: form.fuelType === fuel.name, unavailable: fuel.unavailable }"
-          :title="`Rp ${fuel.price.toLocaleString('id-ID')}/L${fuel.unavailable ? ' (belum tersedia)' : ''}`"
+          :title="`${fuel.brand} - Rp ${fuel.price.toLocaleString('id-ID')}/L${fuel.unavailable ? ' (belum tersedia)' : ''}`"
           @click="selectFuelType(fuel)"
         >
           <span class="dot" :style="{ backgroundColor: fuel.color }"></span>
-          <span>{{ fuel.name.split(' ')[0] }}</span>
+          <span v-if="selectedBrandTab === 'Semua'" class="chip-brand-tag">{{ fuel.brand }}</span>
+          <span>{{ fuel.name.split(' (')[0] }}</span>
         </button>
       </div>
     </div>
@@ -598,6 +629,9 @@ const fuelBadgeColor = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
 }
 
 .form-header {
@@ -606,6 +640,9 @@ const fuelBadgeColor = computed(() => {
   justify-content: space-between;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border-color);
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .header-left {
@@ -845,25 +882,68 @@ const fuelBadgeColor = computed(() => {
 }
 
 /* Quick Fuel Selector */
-.quick-fuels {
+.quick-fuels-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(13, 21, 39, 0.45);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.quick-fuels-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 2px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .quick-label {
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.brand-filter-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 4px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-color);
+}
+
+.brand-tab-btn {
+  background: none;
+  border: none;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.brand-tab-btn:hover {
+  color: #fff;
+}
+
+.brand-tab-btn.active {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
 }
 
 .fuel-chips-scroll {
   display: flex;
   align-items: center;
   gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .fuel-chip {
@@ -880,6 +960,14 @@ const fuelBadgeColor = computed(() => {
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.chip-brand-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
 }
 
 .fuel-chip:hover {
