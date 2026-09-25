@@ -99,9 +99,9 @@ export function parseFuelReceiptText(rawText) {
   // 1. Detect SPBU Brand & Name
   const pertaminaMatch = cleanText.match(/(?:SPBU\s*(?:NO\.?)?\s*([0-9]{2}[\.\-][0-9]{3}[\.\-][0-9]{2,3}|[0-9]{2}[\.\-][0-9]{5}|[0-9]{6,8}))/i) ||
     cleanText.match(/(?:PERTAMINA|PATRA\s*NIAGA|PASTI\s*PAS)/i);
-  const shellMatch = cleanText.match(/(?:SHELL\s*([A-Z0-9\s]+))/i) || cleanText.includes('SHELL');
-  const bpMatch = cleanText.match(/(?:BP(?:\-AKR)?\s*([A-Z0-9\s]+))/i) || cleanText.includes('BP-AKR') || cleanText.includes('BP 92');
-  const vivoMatch = cleanText.match(/(?:VIVO\s*([A-Z0-9\s]+))/i) || cleanText.includes('REVVO') || cleanText.includes('VIVO');
+  const shellMatch = cleanText.match(/(?:SHELL\s*([A-Z0-9\s\-]+))/i) || cleanText.includes('SHELL');
+  const bpMatch = cleanText.match(/(?:BP(?:\-AKR)?\s*([A-Z0-9\s\-]+))/i) || cleanText.includes('BP-AKR') || cleanText.includes('BP 92');
+  const vivoMatch = cleanText.match(/(?:VIVO\s*([A-Z0-9\s\-]+))/i) || cleanText.includes('REVVO') || cleanText.includes('VIVO');
 
   if (shellMatch) {
     result.fuelBrand = 'Shell';
@@ -134,10 +134,13 @@ export function parseFuelReceiptText(rawText) {
   }
 
   if (printedSpbuName) {
-    // Buang kode SPBU dari nama supaya tidak dobel (mis. "SPBU 34.123.45 SUKODONO" -> "SPBU SUKODONO")
+    // Buang kode SPBU, NPWP, dan deret angka teknis dari nama
     let cleaned = printedSpbuName
       .replace(/[0-9]{2}[\.\-][0-9]{2,3}[\.\-][0-9]{2,3}/g, '')
       .replace(/[0-9]{2}[\.\-][0-9]{5}/g, '')
+      .replace(/NPWP[:\s]+[0-9.\-]+/i, '')
+      .replace(/\b[0-9]{1,2}[A-Z]{2,4}\s*[0-9]{2,}\b/g, '') // Buang kode seperti 1ML5 DO
+      .replace(/\b[A-Z0-9]{5,}\b/g, '') // Buang kode acak panjang
       .replace(/^SPBU\s*(?:NO\.?)?\s*$/i, '')
       .replace(/\s+/g, ' ')
       .trim();
@@ -264,16 +267,22 @@ export function parseFuelReceiptText(rawText) {
     result.totalCandidates = totalCandidates;
   }
 
-  // Cadangan: baris pengisian "3.13 Ltr x Rp 15.950" (tanpa kata TOTAL/NOMINAL).
-  // Dipakai hanya kalau tidak ada satu pun baris total berlabel yang terbaca,
-  // supaya angka hasil hitung tidak menimpa angka yang tercetak di nota.
-  if (!result.totalPrice) {
-    const barePurchaseRow = normalizedRaw.match(/([0-9]{1,3}[,\.][0-9]{1,3})\s*LTR\s*[Xx\*=]\s*RP?\.?\s*([0-9]{1,2}[.,][0-9]{3})/i);
-    if (barePurchaseRow) {
-      const vol = parseIndonesianFloat(barePurchaseRow[1]);
-      const price = parseIndonesianCurrency(barePurchaseRow[2]);
-      if (vol > 0.5 && vol < 500 && price >= 2000 && price <= 100000) {
-        if (!result.volumeLiters) result.volumeLiters = parseFloat(vol.toFixed(2));
+  // Cadangan: baris pengisian Shell/BP/Vivo
+  // Contoh Shell: "4.566L x 10950Rp/L"
+  // Contoh Pertamina: "3.13 Ltr x Rp 15.950"
+  if (!result.totalPrice || result.totalPrice < 1000) {
+    // Pola Shell/Internasional: [Volume]L x [Harga]
+    const shellRow = normalizedRaw.match(/([0-9]{1,3}[,\.][0-9]{2,3})\s*[Ll]\s*[Xx\*=]\s*([0-9]{4,6})\s*RP/i) ||
+                     normalizedRaw.match(/([0-9]{1,3}[,\.][0-9]{2,3})\s*[Ll]\s*[Xx\*=]\s*RP?\.?\s*([0-9]{1,2}[.,][0-9]{3})/i);
+    
+    if (shellRow) {
+      const vol = parseIndonesianFloat(shellRow[1]);
+      const price = shellRow[2].includes('.') || shellRow[2].includes(',') 
+        ? parseIndonesianCurrency(shellRow[2]) 
+        : parseInt(shellRow[2], 10);
+
+      if (vol > 0.1 && vol < 500 && price >= 2000 && price <= 100000) {
+        if (!result.volumeLiters) result.volumeLiters = parseFloat(vol.toFixed(3));
         if (!result.pricePerLiter) result.pricePerLiter = price;
         result.totalPrice = Math.round(vol * price);
       }
@@ -473,8 +482,8 @@ function cleanOcrNumber(str) {
  * Ditulis dari yang paling kuat ke paling lemah.
  */
 const TOTAL_LABELS = [
-  { re: /DIB[AE]YAR\s*KONSUMEN|TOTAL\s*PENJUALAN|TOTAL\s*PEMBELIAN|TOTAL\s*PENJUALAN/i, weight: 10 },
-  { re: /TOTAL\s*HARGA|TOTAL\s*BAYAR|TOTAL\s*RP|TOTAL\s*RUPIAH|GRAND\s*TOTAL|JUMLAH\s*BAYAR|JUMLAH\s*RP/i, weight: 9 },
+  { re: /DIB[AE]YAR\s*KONSUMEN|TOTAL\s*PENJUALAN|TOTAL\s*PEMBELIAN|TOTAL\s*INVOICE/i, weight: 10 },
+  { re: /SALE\s*TOTAL|TOTAL\s*HARGA|TOTAL\s*BAYAR|TOTAL\s*RP|TOTAL\s*RUPIAH|GRAND\s*TOTAL|JUMLAH\s*BAYAR|JUMLAH\s*RP/i, weight: 9 },
   { re: /^\s*TOTAL\b/i, weight: 8 },
   { re: /\bNOMINAL\b/i, weight: 7 },
   { re: /\bJUMLAH\b/i, weight: 6 },
