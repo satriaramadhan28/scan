@@ -7,16 +7,20 @@ import {
   Trash2, 
   Edit, 
   CheckSquare, 
-  Square,
-  AlertCircle,
-  Calendar,
-  User,
-  Fuel,
-  RotateCcw,
-  X
+  Square, 
+  AlertCircle, 
+  Calendar, 
+  User, 
+  Fuel, 
+  RotateCcw, 
+  X,
+  FileText,
+  FileSpreadsheet,
+  Loader2
 } from 'lucide-vue-next';
 import { formatRupiah, formatNumber, exportReceiptsToCsv } from '../services/pdfExportService.js';
 import { FUEL_TYPES } from '../services/spbuParser.js';
+import ExportPdfModal from './ExportPdfModal.vue';
 
 const props = defineProps({
   receipts: {
@@ -37,6 +41,7 @@ const selectedDateFilter = ref('');
 const selectedPeriodFilter = ref('all');
 const selectedFuelFilter = ref('all');
 const selectedIds = ref(new Set());
+const showExportPdfModal = ref(false);
 
 // Date calculation helpers
 const todayStr = computed(() => {
@@ -94,6 +99,12 @@ const filteredReceipts = computed(() => {
   });
 });
 
+const exportableReceipts = computed(() => {
+  return selectedIds.value.size > 0 
+    ? props.receipts.filter(r => selectedIds.value.has(r.id))
+    : filteredReceipts.value;
+});
+
 // Summary metrics of current filtered data
 const filteredSummary = computed(() => {
   const totalRp = filteredReceipts.value.reduce((acc, c) => acc + (Number(c.totalPrice) || 0), 0);
@@ -137,11 +148,12 @@ function toggleSelectAll() {
   }
 }
 
+function openExportPdfModal() {
+  showExportPdfModal.value = true;
+}
+
 function handleExportCsv() {
-  const dataToExport = selectedIds.value.size > 0 
-    ? props.receipts.filter(r => selectedIds.value.has(r.id))
-    : filteredReceipts.value;
-  exportReceiptsToCsv(dataToExport);
+  exportReceiptsToCsv(exportableReceipts.value);
 }
 
 function getFuelBadgeColor(fuelName) {
@@ -163,6 +175,9 @@ function getFuelBadgeColor(fuelName) {
             <span v-if="filteredReceipts.length > 0" class="sub-highlight">
               • Total: {{ formatRupiah(filteredSummary.totalRp) }} ({{ formatNumber(filteredSummary.totalLiters) }} L)
             </span>
+            <span v-if="selectedIds.size > 0" class="selected-count-badge">
+              • {{ selectedIds.size }} dipilih
+            </span>
           </p>
         </div>
       </div>
@@ -179,14 +194,26 @@ function getFuelBadgeColor(fuelName) {
           <span>Reset Filter</span>
         </button>
 
-        <!-- Export CSV Button -->
+        <!-- Export CSV Optional Secondary Button -->
         <button 
-          class="btn btn-primary btn-sm" 
+          class="btn btn-secondary btn-sm csv-btn" 
           :disabled="filteredReceipts.length === 0"
           @click="handleExportCsv"
+          title="Export format Spreadsheet Excel / CSV"
         >
-          <Download :size="15" />
-          <span>Export Excel (CSV)</span>
+          <FileSpreadsheet :size="14" />
+          <span>CSV</span>
+        </button>
+
+        <!-- Primary: Export PDF with Scanned Images per Person -->
+        <button 
+          class="btn btn-primary btn-sm export-pdf-btn" 
+          :disabled="filteredReceipts.length === 0"
+          @click="openExportPdfModal"
+          title="Export PDF Resmi & Lampiran Gambar Struk per Orang"
+        >
+          <FileText :size="15" />
+          <span>Export PDF Per Orang</span>
         </button>
       </div>
     </div>
@@ -400,6 +427,15 @@ function getFuelBadgeColor(fuelName) {
         </tbody>
       </table>
     </div>
+
+    <!-- Modal Export PDF per Orang -->
+    <ExportPdfModal
+      v-if="showExportPdfModal"
+      :receipts="exportableReceipts"
+      :users="users"
+      :selected-user-filter="selectedUserFilter"
+      @close="showExportPdfModal = false"
+    />
   </div>
 </template>
 
@@ -428,9 +464,11 @@ function getFuelBadgeColor(fuelName) {
 }
 
 .history-title {
-  font-size: 1.15rem;
+  font-family: var(--font-display);
+  font-size: 1.18rem;
   font-weight: 700;
-  color: #fff;
+  color: #0f172a;
+  letter-spacing: -0.01em;
 }
 
 .history-subtitle {
@@ -439,8 +477,13 @@ function getFuelBadgeColor(fuelName) {
 }
 
 .sub-highlight {
-  color: #34d399;
-  font-weight: 600;
+  color: #059669;
+  font-weight: 700;
+}
+
+.selected-count-badge {
+  color: #2563eb;
+  font-weight: 700;
 }
 
 .header-actions {
@@ -449,14 +492,48 @@ function getFuelBadgeColor(fuelName) {
   gap: 10px;
 }
 
+.export-pdf-btn {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: #ffffff;
+  border: 1px solid #059669;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+  transition: all 0.2s ease;
+}
+
+.export-pdf-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
+}
+
+.export-pdf-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.csv-btn {
+  color: #475569;
+  background: #ffffff;
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Filter Toolbar */
 .filter-toolbar {
   display: flex;
   align-items: flex-end;
   gap: 12px;
   flex-wrap: wrap;
-  background: rgba(13, 21, 39, 0.4);
-  padding: 14px;
+  background: #f8fafc;
+  padding: 16px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
 }
@@ -464,16 +541,17 @@ function getFuelBadgeColor(fuelName) {
 .filter-item {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 
 .filter-mini-label {
-  font-size: 0.73rem;
+  font-size: 0.74rem;
   font-weight: 700;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  letter-spacing: -0.01em;
 }
 
 .search-box {
@@ -508,30 +586,35 @@ function getFuelBadgeColor(fuelName) {
 }
 
 .search-clear-btn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  color: #0f172a;
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .search-input {
   width: 100%;
   padding: 9px 32px 9px 36px;
-  background: var(--bg-input);
+  background: #ffffff;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 0.85rem;
   outline: none;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .search-input:focus {
-  border-color: var(--accent-emerald);
+  border-color: #059669;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
 }
 
 .filter-select {
   padding: 9px 12px;
   font-size: 0.85rem;
   min-width: 170px;
-  background: var(--bg-input);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
 }
 
 .date-filter-group {
@@ -543,16 +626,17 @@ function getFuelBadgeColor(fuelName) {
 .filter-date-picker {
   padding: 8px 10px;
   font-size: 0.85rem;
-  background: var(--bg-input);
+  background: #ffffff;
   color: var(--text-primary);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   outline: none;
   max-width: 150px;
+  box-shadow: var(--shadow-sm);
 }
 
 .filter-date-picker:focus {
-  border-color: var(--accent-emerald);
+  border-color: #059669;
 }
 
 /* Active Filter Tags */
@@ -575,10 +659,10 @@ function getFuelBadgeColor(fuelName) {
   align-items: center;
   gap: 6px;
   padding: 3px 10px;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  border-radius: 9999px;
-  color: #34d399;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: var(--radius-full);
+  color: #059669;
   font-size: 0.75rem;
   font-weight: 600;
 }
@@ -586,7 +670,7 @@ function getFuelBadgeColor(fuelName) {
 .filter-tag button {
   background: none;
   border: none;
-  color: #a7f3d0;
+  color: #059669;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -595,7 +679,7 @@ function getFuelBadgeColor(fuelName) {
 }
 
 .filter-tag button:hover {
-  color: #fff;
+  color: #047857;
   transform: scale(1.15);
 }
 
@@ -604,7 +688,8 @@ function getFuelBadgeColor(fuelName) {
   overflow-x: auto;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  background: rgba(13, 21, 39, 0.6);
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
 }
 
 .receipts-table {
@@ -615,26 +700,33 @@ function getFuelBadgeColor(fuelName) {
 }
 
 .receipts-table th {
-  background: #0d1527;
-  padding: 12px 14px;
+  background: #f8fafc;
+  padding: 13px 16px;
   font-weight: 700;
-  color: var(--text-secondary);
+  font-size: 0.78rem;
+  color: #475569;
   border-bottom: 1px solid var(--border-color);
   white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .receipts-table td {
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 13px 16px;
+  border-bottom: 1px solid #f1f5f9;
   color: var(--text-primary);
 }
 
+.receipt-row {
+  transition: background 0.15s ease;
+}
+
 .receipt-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: #f8fafc;
 }
 
 .receipt-row.is-selected {
-  background: rgba(16, 185, 129, 0.08);
+  background: #ecfdf5;
 }
 
 .text-right { text-align: right; }
@@ -657,12 +749,12 @@ function getFuelBadgeColor(fuelName) {
 }
 
 .user-cell-dot {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: #10b981;
+  background: #059669;
   color: #fff;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -677,8 +769,8 @@ function getFuelBadgeColor(fuelName) {
 
 .driver-cell-name {
   font-weight: 700;
-  font-size: 0.82rem;
-  color: #fff;
+  font-size: 0.84rem;
+  color: #0f172a;
   white-space: nowrap;
 }
 
@@ -690,6 +782,7 @@ function getFuelBadgeColor(fuelName) {
 
 .date-main {
   font-weight: 600;
+  color: #0f172a;
 }
 
 .date-time {
@@ -699,6 +792,7 @@ function getFuelBadgeColor(fuelName) {
 
 .spbu-name {
   font-weight: 600;
+  color: #0f172a;
   max-width: 220px;
   white-space: nowrap;
   overflow: hidden;
@@ -714,10 +808,10 @@ function getFuelBadgeColor(fuelName) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  background: rgba(255, 255, 255, 0.04);
+  padding: 3px 10px;
+  background: #f8fafc;
   border: 1px solid var(--border-color);
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
   font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
@@ -730,8 +824,10 @@ function getFuelBadgeColor(fuelName) {
 }
 
 .total-amount {
-  font-weight: 700;
-  color: #34d399;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.94rem;
+  color: #059669;
 }
 
 .payment-type {
@@ -747,10 +843,10 @@ function getFuelBadgeColor(fuelName) {
 }
 
 .action-icon-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   display: flex;
@@ -758,34 +854,38 @@ function getFuelBadgeColor(fuelName) {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .action-icon-btn.edit:hover {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
-  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+  transform: translateY(-1px);
 }
 
 .action-icon-btn.delete:hover {
-  background: rgba(244, 63, 94, 0.2);
-  color: #fb7185;
-  border-color: #f43f5e;
+  background: #fff1f2;
+  color: #e11d48;
+  border-color: #fecdd3;
+  transform: translateY(-1px);
 }
 
 .empty-history {
-  padding: 60px 20px;
+  padding: 64px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
   text-align: center;
 }
 
 .empty-title {
-  font-size: 1rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
   font-weight: 700;
-  color: #f8fafc;
+  color: #0f172a;
 }
 
 .empty-desc {

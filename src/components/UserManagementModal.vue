@@ -175,6 +175,7 @@ function handleSelect(user) {
   justify-content: space-between;
   padding: 18px 24px;
   border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
 }
 
 .header-left {
@@ -186,11 +187,11 @@ function handleSelect(user) {
 .modal-title {
   font-size: 1.05rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .modal-sub {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
 }
 
@@ -200,7 +201,13 @@ function handleSelect(user) {
   color: var(--text-muted);
   cursor: pointer;
   padding: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .modal-body {
@@ -208,6 +215,7 @@ function handleSelect(user) {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  background: var(--bg-card);
 }
 
 .users-list {
@@ -223,17 +231,19 @@ function handleSelect(user) {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.2s ease;
   gap: 12px;
+  box-shadow: var(--shadow-sm);
 }
 
 .user-row:hover {
-  background: rgba(16, 185, 129, 0.06);
-  border-color: rgba(16, 185, 129, 0.3);
+  background: var(--bg-card);
+  border-color: var(--accent-emerald);
+  box-shadow: var(--shadow-md);
 }
 
 .user-avatar {
@@ -247,6 +257,7 @@ function handleSelect(user) {
   color: #fff;
   font-size: 0.95rem;
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
 
 .user-details {
@@ -258,7 +269,7 @@ function handleSelect(user) {
 .user-name {
   font-size: 0.92rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .user-sub {
@@ -278,17 +289,17 @@ function handleSelect(user) {
   color: var(--text-muted);
   padding: 6px;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: all 0.2s;
 }
 
 .icon-delete:hover {
-  color: #fb7185;
-  background: rgba(244, 63, 94, 0.15);
+  color: #e11d48;
+  background: #ffe4e6;
 }
 
 .add-user-box {
-  background: #0d1527;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 16px;
@@ -331,6 +342,6 @@ function handleSelect(user) {
   justify-content: flex-end;
   padding: 14px 24px;
   border-top: 1px solid var(--border-color);
-  background: rgba(13, 21, 39, 0.5);
+  background: var(--bg-secondary);
 }
 </style>

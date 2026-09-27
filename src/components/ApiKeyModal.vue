@@ -390,6 +390,7 @@ function save() {
   justify-content: space-between;
   padding: 18px 24px;
   border-bottom: 1px solid var(--border-color);
+  background: #ffffff;
 }
 
 .header-left {
@@ -399,9 +400,10 @@ function save() {
 }
 
 .modal-title {
-  font-size: 1.05rem;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
   font-weight: 700;
-  color: #fff;
+  color: #0f172a;
 }
 
 .modal-sub {
@@ -416,6 +418,12 @@ function save() {
   cursor: pointer;
   padding: 6px;
   border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.close-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
 }
 
 .modal-body {
@@ -423,6 +431,7 @@ function save() {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  background: #ffffff;
 }
 
 .engine-cards {
@@ -436,7 +445,7 @@ function save() {
   align-items: flex-start;
   gap: 14px;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: #f8fafc;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -444,19 +453,20 @@ function save() {
 }
 
 .engine-card:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 .engine-card.active {
-  background: rgba(6, 182, 212, 0.08);
-  border-color: #06b6d4;
+  background: #ecfdf5;
+  border-color: #059669;
+  box-shadow: 0 1px 4px rgba(5, 150, 105, 0.12);
 }
 
 .card-title {
   font-size: 0.92rem;
   font-weight: 700;
-  color: #fff;
+  color: #0f172a;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -483,21 +493,21 @@ function save() {
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 9999px;
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
 }
 
 .pill-badge.cyan {
-  background: rgba(6, 182, 212, 0.18);
-  color: #38bdf8;
-  border-color: rgba(6, 182, 212, 0.35);
+  background: #f0f9ff;
+  color: #0284c7;
+  border-color: #bae6fd;
 }
 
 .pill-badge.purple {
-  background: rgba(139, 92, 246, 0.15);
-  color: #c4b5fd;
-  border-color: rgba(139, 92, 246, 0.3);
+  background: #f5f3ff;
+  color: #7c3aed;
+  border-color: #ddd6fe;
 }
 
 .pill-badge.outline {
@@ -510,20 +520,20 @@ function save() {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: rgba(13, 21, 39, 0.65);
+  background: #f8fafc;
   padding: 16px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
 }
 
 .qwen-panel {
-  border-color: rgba(6, 182, 212, 0.25);
+  border-color: #bae6fd;
 }
 
 .subpanel-title {
   font-size: 0.85rem;
   font-weight: 700;
-  color: #fff;
+  color: #0f172a;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -544,8 +554,9 @@ function save() {
   align-items: center;
   gap: 6px;
   font-size: 0.75rem;
-  color: #38bdf8;
+  color: #0284c7;
   text-decoration: none;
+  font-weight: 600;
 }
 
 .get-key-link:hover {
@@ -559,15 +570,15 @@ function save() {
   gap: 10px;
   padding: 16px 24px;
   border-top: 1px solid var(--border-color);
-  background: rgba(13, 21, 39, 0.5);
+  background: #f8fafc;
 }
 
-.text-cyan { color: #38bdf8; }
-.text-purple { color: #a78bfa; }
+.text-cyan { color: #0284c7; }
+.text-purple { color: #7c3aed; }
 
 /* Fuel price panel */
 .fuel-panel {
-  border-color: rgba(16, 185, 129, 0.25);
+  border-color: #a7f3d0;
 }
 
 .panel-desc {
@@ -577,7 +588,7 @@ function save() {
 }
 
 .panel-desc strong {
-  color: #a7f3d0;
+  color: #059669;
 }
 
 /* Kotak status auto-update harga */
@@ -587,13 +598,13 @@ function save() {
   gap: 5px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(56, 189, 248, 0.08);
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
 }
 
 .auto-status-box.otomatis {
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.28);
+  background: #ecfdf5;
+  border-color: #a7f3d0;
 }
 
 .auto-status-line {
@@ -607,7 +618,7 @@ function save() {
 .auto-status-label {
   font-size: 0.78rem;
   font-weight: 700;
-  color: #e2e8f0;
+  color: #0f172a;
 }
 
 .auto-status-meta {
@@ -617,13 +628,13 @@ function save() {
 
 .auto-status-sources {
   font-size: 0.68rem;
-  color: #7dd3fc;
+  color: #0284c7;
 }
 
 .auto-status-warn {
   font-size: 0.68rem;
   line-height: 1.4;
-  color: #fcd34d;
+  color: #d97706;
 }
 
 .price-grid {
@@ -640,6 +651,12 @@ function save() {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.price-row:hover {
+  background: #f1f5f9;
 }
 
 .price-label {
@@ -659,7 +676,7 @@ function save() {
 
 .price-name {
   font-size: 0.76rem;
-  color: #e2e8f0;
+  color: #0f172a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -674,13 +691,13 @@ function save() {
 }
 
 .tag.subsidized {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
+  background: #ecfdf5;
+  color: #059669;
 }
 
 .tag.unavailable {
-  background: rgba(251, 113, 133, 0.15);
-  color: #fb7185;
+  background: #fff1f2;
+  color: #e11d48;
 }
 
 .price-input-wrap {
@@ -699,6 +716,9 @@ function save() {
   width: 115px;
   padding: 6px 8px;
   font-size: 0.78rem;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
 }
 
 .price-actions {
@@ -734,7 +754,7 @@ function save() {
   align-items: center;
   gap: 5px;
   font-size: 0.7rem;
-  color: #38bdf8;
+  color: #0284c7;
   text-decoration: none;
 }
 

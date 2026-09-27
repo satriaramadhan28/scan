@@ -628,7 +628,7 @@ const fuelBadgeColor = computed(() => {
   padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   min-width: 0;
   max-width: 100%;
   width: 100%;
@@ -638,11 +638,11 @@ const fuelBadgeColor = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 12px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border-color);
   min-width: 0;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
 
 .header-left {
@@ -652,9 +652,11 @@ const fuelBadgeColor = computed(() => {
 }
 
 .form-title {
-  font-size: 1.15rem;
+  font-family: var(--font-display);
+  font-size: 1.18rem;
   font-weight: 700;
-  color: #ffffff;
+  color: #0f172a;
+  letter-spacing: -0.01em;
 }
 
 .form-subtitle {
@@ -666,12 +668,12 @@ const fuelBadgeColor = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  border-radius: 9999px;
-  font-size: 0.75rem;
+  padding: 3px 10px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  border-radius: var(--radius-full);
+  font-size: 0.74rem;
   font-weight: 700;
   font-family: var(--font-mono);
 }
@@ -683,16 +685,16 @@ const fuelBadgeColor = computed(() => {
   flex-wrap: wrap;
 }
 
-/* Badge tanggal berlaku harga BBM (klik untuk ubah harga) */
+/* Badge tanggal berlaku harga BBM */
 .price-date-badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  background: rgba(56, 189, 248, 0.12);
-  color: #7dd3fc;
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: #f0f9ff;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
   font-size: 0.72rem;
   font-weight: 700;
   font-family: var(--font-mono);
@@ -701,23 +703,29 @@ const fuelBadgeColor = computed(() => {
 }
 
 .price-date-badge:hover {
-  background: rgba(56, 189, 248, 0.22);
-  color: #bae6fd;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #7dd3fc;
+  transform: translateY(-1px);
 }
 
 /* Banner data perlu diperiksa */
 .review-banner {
-  background: rgba(251, 191, 36, 0.09);
-  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: #fffbeb;
+  border: 1px solid #fde68a;
   border-radius: var(--radius-md);
-  padding: 12px 14px;
+  padding: 13px 16px;
+  box-shadow: 0 1px 3px rgba(217, 119, 6, 0.08);
 }
 
 .review-title {
   font-size: 0.85rem;
   font-weight: 800;
-  color: #fcd34d;
+  color: #92400e;
   margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .review-list {
@@ -725,37 +733,37 @@ const fuelBadgeColor = computed(() => {
   padding-left: 18px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .review-list li {
   font-size: 0.78rem;
   line-height: 1.45;
-  color: #fde68a;
+  color: #78350f;
 }
 
 .review-list strong {
-  color: #fff;
+  color: #451a03;
 }
 
 /* Catatan ketersediaan / subsidi BBM */
 .fuel-note {
-  font-size: 0.77rem;
+  font-size: 0.78rem;
   line-height: 1.45;
-  padding: 9px 12px;
+  padding: 10px 14px;
   border-radius: var(--radius-sm);
 }
 
 .fuel-note.warn {
-  background: rgba(251, 113, 133, 0.1);
-  border: 1px solid rgba(251, 113, 133, 0.3);
-  color: #fecdd3;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #9f1239;
 }
 
 .fuel-note.ok {
-  background: rgba(16, 185, 129, 0.09);
-  border: 1px solid rgba(16, 185, 129, 0.28);
-  color: #a7f3d0;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
 }
 
 .field-hint {
@@ -766,18 +774,18 @@ const fuelBadgeColor = computed(() => {
 }
 
 .field-hint strong {
-  color: #a7f3d0;
+  color: #059669;
 }
 
 .field-hint.hint-warn strong {
-  color: #fcd34d;
+  color: #d97706;
 }
 
 .link-btn {
   background: none;
   border: none;
   padding: 0 2px;
-  color: var(--accent-emerald);
+  color: #059669;
   font-size: 0.72rem;
   font-weight: 700;
   text-decoration: underline;
@@ -791,13 +799,13 @@ const fuelBadgeColor = computed(() => {
 
 /* Driver Selection Box */
 .driver-selection-box {
-  background: rgba(13, 21, 39, 0.7);
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 12px 14px;
+  padding: 13px 15px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .driver-header-row {
@@ -809,16 +817,16 @@ const fuelBadgeColor = computed(() => {
 .driver-label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-size: 0.8rem;
   font-weight: 700;
-  color: #f8fafc;
+  color: #0f172a;
 }
 
 .manage-users-link {
   background: none;
   border: none;
-  color: #60a5fa;
+  color: #2563eb;
   font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
@@ -842,26 +850,29 @@ const fuelBadgeColor = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
-  background: rgba(255, 255, 255, 0.05);
+  padding: 5px 13px;
+  background: #ffffff;
   border: 1px solid var(--border-color);
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .driver-chip:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+  transform: translateY(-1px);
 }
 
 .driver-chip.active {
-  background: rgba(16, 185, 129, 0.18);
-  border-color: #10b981;
-  color: #34d399;
+  background: #ecfdf5;
+  border-color: #059669;
+  color: #059669;
 }
 
 .user-avatar-dot {
@@ -878,18 +889,18 @@ const fuelBadgeColor = computed(() => {
 
 .add-chip {
   border-style: dashed;
-  color: var(--accent-emerald);
+  color: #059669;
 }
 
 /* Quick Fuel Selector */
 .quick-fuels-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  background: rgba(13, 21, 39, 0.45);
+  gap: 9px;
+  background: #f8fafc;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
+  padding: 12px 14px;
 }
 
 .quick-fuels-header {
@@ -911,17 +922,17 @@ const fuelBadgeColor = computed(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.3);
+  background: #f1f5f9;
   padding: 2px 4px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--border-color);
 }
 
 .brand-tab-btn {
   background: none;
   border: none;
-  padding: 3px 8px;
-  border-radius: 9999px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--text-muted);
@@ -930,20 +941,21 @@ const fuelBadgeColor = computed(() => {
 }
 
 .brand-tab-btn:hover {
-  color: #fff;
+  color: #0f172a;
 }
 
 .brand-tab-btn.active {
-  background: rgba(16, 185, 129, 0.2);
-  color: #34d399;
+  background: #ffffff;
+  color: #059669;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .fuel-chips-scroll {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding-bottom: 3px;
 }
 
 .fuel-chip {
@@ -951,9 +963,9 @@ const fuelBadgeColor = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: #ffffff;
   border: 1px solid var(--border-color);
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
   color: var(--text-secondary);
   font-size: 0.78rem;
   font-weight: 600;
@@ -961,6 +973,7 @@ const fuelBadgeColor = computed(() => {
   white-space: nowrap;
   transition: all 0.2s ease;
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
 
 .chip-brand-tag {
@@ -971,14 +984,16 @@ const fuelBadgeColor = computed(() => {
 }
 
 .fuel-chip:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
 }
 
 .fuel-chip.active {
-  background: rgba(16, 185, 129, 0.15);
-  border-color: #10b981;
-  color: #34d399;
+  background: #ecfdf5;
+  border-color: #059669;
+  color: #059669;
 }
 
 .dot {
@@ -1034,10 +1049,13 @@ const fuelBadgeColor = computed(() => {
 
 /* Total Hero Card */
 .total-hero-group {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 182, 212, 0.04) 100%);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  border-radius: var(--radius-md);
-  padding: 14px 18px;
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+  border: 1.5px solid #a7f3d0;
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.08);
+  position: relative;
+  overflow: hidden;
 }
 
 .total-label-row {
@@ -1048,40 +1066,44 @@ const fuelBadgeColor = computed(() => {
 }
 
 .hero-label {
+  font-family: var(--font-display);
   font-size: 0.88rem;
-  font-weight: 700;
-  color: #34d399;
+  font-weight: 800;
+  color: #065f46;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
 }
 
 .formula-hint {
   font-size: 0.78rem;
   font-family: var(--font-mono);
-  color: var(--text-secondary);
+  color: #047857;
+  font-weight: 600;
 }
 
 .total-input-wrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .total-rp {
-  font-size: 1.35rem;
+  font-size: 1.45rem;
   font-weight: 800;
-  color: #34d399;
+  color: #059669;
   font-family: var(--font-display);
 }
 
 .total-input {
-  font-size: 1.5rem;
+  font-size: 1.65rem;
   font-weight: 800;
-  color: #ffffff;
+  color: #064e3b;
   background: transparent;
   border: none;
   outline: none;
   width: 100%;
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }
 
 /* Form Actions */
@@ -1092,7 +1114,7 @@ const fuelBadgeColor = computed(() => {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 6px;
-  padding-top: 14px;
+  padding-top: 16px;
   border-top: 1px solid var(--border-color);
 }
 
@@ -1103,7 +1125,7 @@ const fuelBadgeColor = computed(() => {
 }
 
 .save-main-btn {
-  min-width: 250px;
+  min-width: 260px;
 }
 
 @media (max-width: 720px) {

@@ -47,6 +47,8 @@ export function parseAiReceiptResponse(textResponse, engineName) {
   };
 }
 
+import { normalizeDateToIso, normalizeTimeToHHMM } from './spbuParser.js';
+
 const ANGKA = new Set(['volumeLiters', 'pricePerLiter', 'totalPrice']);
 
 /**
@@ -79,6 +81,22 @@ export function normalizeAiFields(parsed) {
     out[key] = Number.isFinite(num) ? num : 0;
   }
 
+  // Normalisasi Tanggal ke format standar ISO YYYY-MM-DD
+  if (out.date) {
+    const iso = normalizeDateToIso(out.date);
+    if (iso) {
+      out.date = iso;
+    }
+  }
+
+  // Normalisasi Waktu ke format standar HH:MM
+  if (out.time) {
+    const hhmm = normalizeTimeToHHMM(out.time);
+    if (hhmm) {
+      out.time = hhmm;
+    }
+  }
+
   // Kalau AI hanya mengisi 2 dari 3 nilai, lengkapi dari hubungan matematisnya
   const vol = Number(out.volumeLiters) || 0;
   const price = Number(out.pricePerLiter) || 0;
@@ -99,6 +117,7 @@ export function normalizeAiFields(parsed) {
   if (!out.spbuName) missing.push('spbuName');
   if (!out.fuelType) missing.push('fuelType');
   if (!out.receiptNo) missing.push('receiptNo');
+  if (!out.date) missing.push('date');
   if (missing.length) {
     out.needsReview = true;
     out.reviewFields = missing;

@@ -230,16 +230,27 @@ const fuelTypeBreakdown = computed(() => {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 18px;
 }
 
 .stat-card {
-  padding: 20px;
+  padding: 22px;
   display: flex;
   align-items: center;
   gap: 16px;
   position: relative;
   overflow: hidden;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: all 0.22s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-hover);
 }
 
 .stat-icon-wrapper {
@@ -253,47 +264,49 @@ const fuelTypeBreakdown = computed(() => {
 }
 
 .bg-emerald {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
 }
 
 .bg-blue {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
 }
 
 .bg-purple {
-  background: rgba(139, 92, 246, 0.15);
-  color: #a78bfa;
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
 }
 
 .bg-amber {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
 }
 
 .stat-content {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .stat-label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
 }
 
 .stat-value {
-  font-size: 1.35rem;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
   font-weight: 800;
-  color: #ffffff;
+  color: #0f172a;
+  letter-spacing: -0.02em;
 }
 
 .stat-value .unit {
@@ -315,7 +328,7 @@ const fuelTypeBreakdown = computed(() => {
 }
 
 .breakdown-card {
-  padding: 22px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -325,7 +338,7 @@ const fuelTypeBreakdown = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 12px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -336,16 +349,18 @@ const fuelTypeBreakdown = computed(() => {
 }
 
 .header-title h3 {
-  font-size: 1rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
   font-weight: 700;
-  color: #fff;
+  color: #0f172a;
+  letter-spacing: -0.01em;
 }
 
 .empty-state {
-  padding: 30px;
+  padding: 36px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.88rem;
 }
 
 /* Driver Analytics */
@@ -359,26 +374,32 @@ const fuelTypeBreakdown = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 12px 16px;
+  background: #f8fafc;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.driver-stat-row:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
 .d-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .d-avatar-icon {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: #059669;
   color: #fff;
   font-weight: 800;
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -390,9 +411,9 @@ const fuelTypeBreakdown = computed(() => {
 }
 
 .d-name {
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   font-weight: 700;
-  color: #fff;
+  color: #0f172a;
 }
 
 .d-dept {
@@ -407,8 +428,10 @@ const fuelTypeBreakdown = computed(() => {
 }
 
 .d-total {
-  font-size: 0.92rem;
+  font-family: var(--font-display);
+  font-size: 0.96rem;
   font-weight: 700;
+  color: #059669;
 }
 
 .d-liters {
@@ -420,13 +443,13 @@ const fuelTypeBreakdown = computed(() => {
 .breakdown-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .breakdown-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
 .item-info {
@@ -442,13 +465,13 @@ const fuelTypeBreakdown = computed(() => {
 }
 
 .color-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
 }
 
 .item-name {
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -461,26 +484,27 @@ const fuelTypeBreakdown = computed(() => {
 
 .item-liters {
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: var(--text-secondary);
 }
 
 .item-total {
+  font-family: var(--font-display);
   font-weight: 700;
-  font-size: 0.88rem;
-  color: #ffffff;
+  font-size: 0.92rem;
+  color: #0f172a;
 }
 
 .progress-track {
-  height: 6px;
-  background: #1e293b;
-  border-radius: 9999px;
+  height: 7px;
+  background: #f1f5f9;
+  border-radius: var(--radius-full);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
   transition: width 0.3s ease;
 }
 
@@ -490,8 +514,8 @@ const fuelTypeBreakdown = computed(() => {
   text-align: right;
 }
 
-.text-emerald { color: #34d399; }
-.text-blue { color: #60a5fa; }
+.text-emerald { color: #059669; }
+.text-blue { color: #2563eb; }
 
 @media (max-width: 1024px) {
   .stats-grid {

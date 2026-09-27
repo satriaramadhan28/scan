@@ -96,6 +96,7 @@ function chooseSample(sample) {
   justify-content: space-between;
   padding: 18px 24px;
   border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
 }
 
 .header-left {
@@ -107,11 +108,11 @@ function chooseSample(sample) {
 .modal-title {
   font-size: 1.05rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .modal-sub {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
 }
 
@@ -121,11 +122,18 @@ function chooseSample(sample) {
   color: var(--text-muted);
   cursor: pointer;
   padding: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .modal-body {
   padding: 24px;
+  background: var(--bg-card);
 }
 
 .samples-grid {
@@ -135,7 +143,7 @@ function chooseSample(sample) {
 }
 
 .sample-card {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 16px;
@@ -143,15 +151,16 @@ function chooseSample(sample) {
   flex-direction: column;
   gap: 10px;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  box-shadow: var(--shadow-sm);
 }
 
 .sample-card:hover {
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.4);
+  background: var(--bg-card);
+  border-color: var(--accent-emerald);
   transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-md);
 }
 
 .sample-top {
@@ -171,14 +180,14 @@ function chooseSample(sample) {
 .sample-price {
   font-size: 0.95rem;
   font-weight: 800;
-  color: #34d399;
+  color: var(--accent-emerald);
   font-family: var(--font-display);
 }
 
 .sample-title {
   font-size: 0.95rem;
-  font-weight: 700;
-  color: #ffffff;
+  font-weight: 750;
+  color: var(--text-primary);
 }
 
 .sample-sub {
@@ -191,7 +200,8 @@ function chooseSample(sample) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   font-size: 0.75rem;
@@ -205,11 +215,14 @@ function chooseSample(sample) {
 .s-metric .label {
   font-size: 0.68rem;
   color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .s-metric .val {
   font-weight: 700;
-  color: #cbd5e1;
+  color: var(--text-primary);
 }
 
 .sample-action-row {
@@ -229,7 +242,7 @@ function chooseSample(sample) {
   justify-content: flex-end;
   padding: 14px 24px;
   border-top: 1px solid var(--border-color);
-  background: rgba(13, 21, 39, 0.5);
+  background: var(--bg-secondary);
 }
 
 @media (max-width: 600px) {

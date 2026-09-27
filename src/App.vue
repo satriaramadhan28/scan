@@ -23,7 +23,7 @@ import {
   getActiveUser,
   setActiveUser
 } from './services/storageService.js';
-import { parseFuelReceiptText } from './services/spbuParser.js';
+import { parseFuelReceiptText, normalizeDateToIso, normalizeTimeToHHMM } from './services/spbuParser.js';
 import { fetchLatestFuelPrices, applyAutoPrices, getFuelPriceStatus, isFetchDue } from './services/fuelPriceUpdater.js';
 
 // State
@@ -208,6 +208,20 @@ function mergeScanResult(current, scanned) {
     id: `fuel_${Date.now()}`
   };
 
+  // Pastikan tanggal dan jam hasil scan dinormalisasi dengan benar
+  if (scanned.date) {
+    const validDate = normalizeDateToIso(scanned.date);
+    if (validDate) {
+      merged.date = validDate;
+    }
+  }
+  if (scanned.time) {
+    const validTime = normalizeTimeToHHMM(scanned.time);
+    if (validTime) {
+      merged.time = validTime;
+    }
+  }
+
   // Jangan biarkan nilai kosong menimpa data yang sudah terisi
   const keepExisting = ['spbuName', 'spbuCode', 'fuelType', 'fuelBrand', 'paymentMethod', 'date', 'time', 'pumpNo', 'nozzleNo', 'receiptNo'];
   for (const key of keepExisting) {
@@ -348,12 +362,22 @@ function handleSelectSample(sample) {
 }
 
 function handleSaveReceipt(data) {
-  const updatedList = saveReceiptToDb(data);
+  const receiptToSave = {
+    ...data,
+    imageUrl: data.imageUrl || currentImage.value || currentRawImage.value || null
+  };
+  const updatedList = saveReceiptToDb(receiptToSave);
   savedReceipts.value = updatedList;
 }
 
 function handleEditReceipt(receipt) {
   currentReceipt.value = { ...receipt };
+  if (receipt.imageUrl) {
+    currentImage.value = receipt.imageUrl;
+    if (uploaderRef.value) {
+      uploaderRef.value.setImage(receipt.imageUrl);
+    }
+  }
   activeTab.value = 'scanner';
 }
 
@@ -493,13 +517,13 @@ function onKeyUpdated(info) {
 
 .main-content {
   flex: 1;
-  padding: 24px 0 60px 0;
+  padding: 28px 0 64px 0;
 }
 
 .content-container {
-  max-width: 1280px;
+  max-width: 1320px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 24px;
 }
 
 /* 2-Column Scanner View */
@@ -511,44 +535,55 @@ function onKeyUpdated(info) {
   width: 100%;
 }
 
-.scanner-col-left,
+.scanner-col-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  width: 100%;
+}
+
 .scanner-col-right {
   min-width: 0;
   width: 100%;
 }
 
 .raw-text-card {
-  padding: 14px 18px;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  background: rgba(13, 21, 39, 0.6);
+  gap: 12px;
+  background: var(--bg-card);
   min-width: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .raw-text-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 700;
   color: var(--text-secondary);
 }
 
 .raw-text-content {
-  font-size: 0.75rem;
-  color: #a7f3d0;
-  background: rgba(0, 0, 0, 0.4);
-  padding: 12px;
+  font-size: 0.76rem;
+  color: #065f46;
+  background: #f0fdf4;
+  padding: 14px;
   border-radius: var(--radius-sm);
-  max-height: 180px;
+  max-height: 200px;
   overflow-y: auto;
   white-space: pre-wrap;
-  border: 1px solid var(--border-color);
+  border: 1px solid #bbf7d0;
   word-break: break-all;
+  line-height: 1.5;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 980px) {
   .scanner-layout {
     grid-template-columns: 1fr;
   }

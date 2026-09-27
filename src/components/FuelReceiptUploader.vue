@@ -595,7 +595,7 @@ defineExpose({
 
 <style scoped>
 .uploader-container {
-  padding: 22px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -613,6 +613,7 @@ defineExpose({
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
+  padding-bottom: 4px;
 }
 
 .header-left {
@@ -623,55 +624,68 @@ defineExpose({
 }
 
 .title {
-  font-size: 1.05rem;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 
 .text-emerald {
   color: var(--accent-emerald);
 }
 
+.text-cyan {
+  color: var(--accent-cyan);
+}
+
 .text-rose {
-  color: #fb7185;
+  color: var(--accent-rose);
 }
 
 .engine-tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 9999px;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
   font-size: 0.72rem;
   font-family: var(--font-mono);
   font-weight: 700;
-  background: rgba(16, 185, 129, 0.12);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.engine-tag.qwen {
+  background: #f0f9ff;
+  color: #0284c7;
+  border-color: #bae6fd;
 }
 
 .engine-tag.gemini {
-  background: rgba(139, 92, 246, 0.15);
-  color: #a78bfa;
-  border-color: rgba(139, 92, 246, 0.3);
+  background: #f5f3ff;
+  color: #7c3aed;
+  border-color: #ddd6fe;
 }
 
 /* Dropzone */
 .dropzone {
-  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border: 2px dashed #cbd5e1;
   border-radius: var(--radius-lg);
-  padding: 34px 20px;
+  padding: 36px 20px;
   text-align: center;
   cursor: pointer;
-  background: rgba(15, 23, 42, 0.4);
-  transition: all 0.25s ease;
+  background: #f8fafc;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
 }
 
 .dropzone:hover, .dropzone.is-dragging {
-  border-color: var(--accent-emerald);
-  background: rgba(16, 185, 129, 0.05);
-  box-shadow: 0 0 25px rgba(16, 185, 129, 0.15);
+  border-color: #059669;
+  background: #ecfdf5;
+  transform: translateY(-2px);
 }
 
 .dropzone-inner {
@@ -687,23 +701,31 @@ defineExpose({
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: rgba(16, 185, 129, 0.1);
+  background: #ecfdf5;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  border: 1px solid #a7f3d0;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.15);
+  transition: transform 0.25s ease;
+}
+
+.dropzone:hover .upload-icon-circle {
+  transform: scale(1.06);
 }
 
 .dropzone-title {
-  font-size: 1.1rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .dropzone-sub {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .spbu-brands-row {
@@ -719,33 +741,36 @@ defineExpose({
   font-size: 0.72rem;
   font-weight: 700;
   padding: 3px 10px;
-  border-radius: 9999px;
-  border: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-full);
+  transition: transform 0.2s ease;
+}
+
+.brand-pill:hover {
+  transform: translateY(-1px);
 }
 
 .brand-pill.pertamina {
-  color: #60a5fa;
-  border-color: rgba(59, 130, 246, 0.3);
-  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
 }
 
 .brand-pill.shell {
-  color: #fbbf24;
-  border-color: rgba(245, 158, 11, 0.3);
-  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
 }
 
 .brand-pill.bp {
-  color: #4ade80;
-  border-color: rgba(34, 197, 94, 0.3);
-  background: rgba(34, 197, 94, 0.1);
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
 }
 
 .brand-pill.vivo {
-  color: #38bdf8;
-  border-color: rgba(14, 165, 233, 0.3);
-  background: rgba(14, 165, 233, 0.1);
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+  background: #f0f9ff;
 }
 
 .dropzone-actions {
@@ -760,12 +785,12 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(16, 185, 129, 0.08);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
   padding: 8px 14px;
   border-radius: var(--radius-sm);
   font-size: 0.76rem;
-  color: #a7f3d0;
+  color: #065f46;
   text-align: left;
   margin-top: 4px;
 }
@@ -779,7 +804,7 @@ defineExpose({
 .sample-link {
   background: none;
   border: none;
-  color: var(--accent-emerald);
+  color: #059669;
   font-weight: 700;
   cursor: pointer;
   text-decoration: underline;
@@ -787,7 +812,7 @@ defineExpose({
 }
 
 .sample-link:hover {
-  color: #34d399;
+  color: #047857;
 }
 
 /* Camera */
@@ -798,6 +823,7 @@ defineExpose({
   background: #000;
   border-radius: var(--radius-md);
   overflow: hidden;
+  border: 1px solid #cbd5e1;
 }
 
 .camera-video {
@@ -821,15 +847,15 @@ defineExpose({
   position: relative;
   width: 65%;
   height: 60%;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 8px;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
 }
 
 .corner-marker {
   position: absolute;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-color: #10b981;
   border-style: solid;
 }
@@ -842,10 +868,10 @@ defineExpose({
 .camera-tip {
   color: #fff;
   font-size: 0.8rem;
-  background: rgba(0, 0, 0, 0.75);
-  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 5px 14px;
   border-radius: 20px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .camera-zoom-bar {
@@ -856,26 +882,24 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(8px);
-  padding: 4px 12px;
-  border-radius: 9999px;
-  border: 1px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.9);
+  padding: 5px 14px;
+  border-radius: var(--radius-full);
   z-index: 25;
 }
 
 .zoom-label {
   font-size: 0.75rem;
   font-weight: 700;
-  color: var(--text-secondary);
+  color: #94a3b8;
 }
 
 .zoom-chip {
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 6px;
   background: transparent;
   border: 1px solid transparent;
-  color: var(--text-secondary);
+  color: #94a3b8;
   font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
@@ -887,14 +911,14 @@ defineExpose({
 }
 
 .zoom-chip.active {
-  background: rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.3);
   border-color: #10b981;
   color: #34d399;
 }
 
 .camera-controls {
   position: absolute;
-  bottom: 16px;
+  bottom: 18px;
   left: 0;
   right: 0;
   display: flex;
@@ -906,7 +930,7 @@ defineExpose({
 /* Preview Card */
 .preview-card {
   position: relative;
-  background: #080d1a;
+  background: #f8fafc;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -918,9 +942,10 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #050811;
+  background: #f1f5f9;
   overflow: hidden;
-  padding: 14px;
+  padding: 16px;
+  position: relative;
 }
 
 .receipt-image {
@@ -928,14 +953,14 @@ defineExpose({
   max-height: 390px;
   object-fit: contain;
   border-radius: 6px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
 /* Scanning Overlay */
 .scanning-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(10, 15, 29, 0.75);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -944,21 +969,21 @@ defineExpose({
 }
 
 .scan-spinner-box {
-  background: #0f172a;
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  padding: 24px 32px;
-  border-radius: var(--radius-md);
+  background: #ffffff;
+  border: 1px solid #a7f3d0;
+  padding: 24px 34px;
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   text-align: center;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
 }
 
 .spin-icon {
-  color: var(--accent-emerald);
-  animation: spin 1.5s linear infinite;
+  color: #059669;
+  animation: spin 1.4s linear infinite;
 }
 
 @keyframes spin {
@@ -967,30 +992,30 @@ defineExpose({
 }
 
 .scan-status-text {
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   font-weight: 600;
-  color: #f8fafc;
+  color: #0f172a;
 }
 
 .scan-progress-bar {
-  width: 200px;
+  width: 220px;
   height: 6px;
-  background: #1e293b;
-  border-radius: 9999px;
+  background: #e2e8f0;
+  border-radius: var(--radius-full);
   overflow: hidden;
   margin-top: 4px;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #10b981, #34d399);
+  background: #059669;
   transition: width 0.2s ease;
 }
 
 .progress-pct {
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   font-family: var(--font-mono);
-  color: var(--accent-emerald);
+  color: #059669;
   font-weight: 700;
 }
 
@@ -1000,7 +1025,7 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: rgba(19, 28, 51, 0.6);
+  background: #f8fafc;
   border-top: 1px solid var(--border-color);
   flex-wrap: wrap;
   gap: 8px;
@@ -1018,39 +1043,41 @@ defineExpose({
   gap: 6px;
   padding: 6px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.05);
+  background: #ffffff;
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .tool-btn:hover, .tool-btn.active {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
 }
 
 .btn-enhance {
-  background: rgba(16, 185, 129, 0.12);
-  border-color: rgba(16, 185, 129, 0.3);
-  color: #34d399;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
 }
 
 .btn-enhance:hover {
-  background: rgba(16, 185, 129, 0.22);
+  background: #d1fae5;
+  color: #047857;
 }
 
 /* Filter Panel */
 .filter-panel {
-  padding: 14px;
-  background: #0d1527;
+  padding: 16px;
+  background: #f8fafc;
   border-top: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .filter-header {
@@ -1060,27 +1087,30 @@ defineExpose({
 }
 
 .filter-title {
-  font-size: 0.82rem;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
   font-weight: 700;
-  color: var(--accent-emerald);
+  color: #059669;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
 }
 
 .filter-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .filter-row label {
   font-size: 0.78rem;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 
 .filter-row input[type="range"] {
-  accent-color: var(--accent-emerald);
+  accent-color: #059669;
   width: 100%;
+  cursor: pointer;
 }
 
 .toggle-label {
@@ -1089,7 +1119,8 @@ defineExpose({
   gap: 8px;
   font-size: 0.8rem;
   cursor: pointer;
-  color: #e2e8f0;
+  color: #334155;
+  font-weight: 500;
 }
 
 .scan-cta-box {
@@ -1098,6 +1129,7 @@ defineExpose({
 
 .scan-execute-btn {
   width: 100%;
-  font-size: 1rem;
+  font-size: 1.02rem;
+  padding: 13px;
 }
 </style>

@@ -397,29 +397,20 @@ export function parseFuelReceiptText(rawText) {
     ])];
   }
 
-  // 6. Extract Date & Time (e.g. 23/04/2020 10:49)
-  const timeRegexPart = `([0-2]?[0-9A-Z]:[0-5][0-9A-Z](?::[0-5][0-9A-Z])?)`;
-  const dateTimeMatch = normalizedRaw.match(new RegExp(`([0-3]?[0-9][\\/\\-\\.][0-1]?[0-9][\\/\\-\\.](?:20)?[0-9]{2,4})\\s+${timeRegexPart}`, 'i'));
-
-  if (dateTimeMatch) {
-    result.date = normalizeDate(dateTimeMatch[1]);
-    result.time = normalizeTime(dateTimeMatch[2]);
+  // 6. Extract Date & Time using robust multi-pattern extractor
+  const extractedDateTime = extractDateAndTimeFromReceipt(rawText, lines, normalizedRaw);
+  if (extractedDateTime.date) {
+    result.date = extractedDateTime.date;
   } else {
-    const dateMatch = normalizedRaw.match(/([0-3]?[0-9][\/\-\.][0-1]?[0-9][\/\-\.](?:20)?[0-9]{2,4})/) ||
-      normalizedRaw.match(/(?:20[0-9]{2,4}[\/\-\.][0-1]?[0-9][\/\-\.][0-3]?[0-9])/);
-    
-    if (dateMatch) {
-      result.date = normalizeDate(dateMatch[1]);
-    } else {
-      result.date = '';
-      result.needsReview = true;
-      result.reviewFields = [...new Set([...(result.reviewFields || []), 'date'])];
-    }
+    result.date = '';
+    result.needsReview = true;
+    result.reviewFields = [...new Set([...(result.reviewFields || []), 'date'])];
+  }
 
-    const timeMatch = normalizedRaw.match(new RegExp(`(?:WAKTU|JAM|TIME|PADA)[\\s:=]*${timeRegexPart}`, 'i')) ||
-                      normalizedRaw.match(new RegExp(timeRegexPart, 'i'));
-    
-    result.time = timeMatch ? normalizeTime(timeMatch[1]) : '';
+  if (extractedDateTime.time) {
+    result.time = extractedDateTime.time;
+  } else {
+    result.time = '';
   }
 
   // 7. Extract Pump & Receipt No (e.g. Receipt No. : 009504, Pump No. 02)
@@ -640,24 +631,285 @@ function parseIndonesianCurrency(str) {
   return parseInt(clean, 10) || 0;
 }
 
-function normalizeDate(rawDate) {
-  if (!rawDate) return new Date().toISOString().split('T')[0];
-  const parts = rawDate.split(/[\/\-\.]/);
-  if (parts.length === 3) {
-    let day = parts[0].padStart(2, '0');
-    let month = parts[1].padStart(2, '0');
-    let year = parts[2];
+const INDO_MONTH_MAP = {
+  jan: '01', januari: '01', january: '01',
+  feb: '02', februari: '02', february: '02',
+  mar: '03', maret: '03', march: '03',
+  apr: '04', april: '04',
+  mei: '05', may: '05',
+  jun: '06', juni: '06', june: '06',
+  jul: '07', juli: '07', july: '07',
+  agu: '08', agt: '08', ags: '08', agust: '08', agustus: '08', aug: '08', august: '08',
+  sep: '09', sept: '09', september: '09',
+  okt: '10', oct: '10', oktober: '10', october: '10',
+  nov: '11', nop: '11', nopember: '11', november: '11',
+  des: '12', dec: '12', desember: '12', december: '12'
+};
 
-    if (parts[0].length === 4) {
-      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-    }
+function cleanOcrDigits(str) {
+  if (!str) return '';
+  return String(str)
+    .toUpperCase()
+    .replace(/[OQ]/g, '0')
+    .replace(/[ILl]/g, '1')
+    .replace(/S/g, '5')
+    .replace(/B/g, '8')
+    .replace(/Z/g, '2')
+    .replace(/[^\d]/g, '');
+}
 
-    if (year.length === 2) {
-      year = '20' + year;
+/**
+ * Normalisasi string tanggal apa pun (DD/MM/YYYY, DD-MMM-YYYY, YYYY-MM-DD, dll.)
+ * menjadi format standar ISO 'YYYY-MM-DD' yang valid untuk <input type="date">.
+ */
+export function normalizeDateToIso(rawDate) {
+  if (!rawDate) return '';
+  let str = String(rawDate).trim();
+
+  // 1. Sudah berformat YYYY-MM-DD murni
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [y, m, d] = str.split('-').map(Number);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 2000 && y <= 2040) {
+      return str;
     }
-    return `${year}-${month}-${day}`;
   }
-  return rawDate;
+
+  // 2. Format ISO Timestamp: 2026-09-22T09:30:15
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    const year = Number(y);
+    const month = Number(m);
+    const day = Number(d);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 2000 && year <= 2040) {
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  // 3. Bersihkan noise OCR umum
+  let clean = str.replace(/[|!\\]/g, '/');
+  // Bersihkan label awalan (TGL:, TANGGAL:, DATE:, dll.)
+  clean = clean.replace(/^(?:TGL|TANGGAL|DATE|DATETIME|WAKTU|TIME|TRANSAKSI|TRX\s*DATE|PRINTED|CETAK)[\s:=#]*/i, '').trim();
+
+  // Pattern A: Format teks nama bulan, misal "22-SEP-2026", "22 Sep 2026", "22 September 2026", "22/Sep/26"
+  const textMonthPattern = /^([0-3]?[0-9])[\s\-_/.]+([A-Za-z]{3,10})[\s\-_/.]+(\d{2,4})/;
+  const tmMatch = clean.match(textMonthPattern);
+  if (tmMatch) {
+    let day = parseInt(cleanOcrDigits(tmMatch[1]), 10);
+    const monthKey = tmMatch[2].toLowerCase();
+    let month = INDO_MONTH_MAP[monthKey];
+    let year = cleanOcrDigits(tmMatch[3]);
+    if (year.length === 2) year = '20' + year;
+    const yearNum = parseInt(year, 10);
+
+    if (month && day >= 1 && day <= 31 && yearNum >= 2000 && yearNum <= 2040) {
+      return `${yearNum}-${month}-${String(day).padStart(2, '0')}`;
+    }
+  }
+
+  // Pattern B: Format teks nama bulan terbalik, misal "Sep 22, 2026"
+  const revTextMonthPattern = /^([A-Za-z]{3,10})[\s\-_/.]+([0-3]?[0-9])(?:st|nd|rd|th)?,?[\s\-_/.]+(\d{2,4})/;
+  const rtmMatch = clean.match(revTextMonthPattern);
+  if (rtmMatch) {
+    const monthKey = rtmMatch[1].toLowerCase();
+    let month = INDO_MONTH_MAP[monthKey];
+    let day = parseInt(cleanOcrDigits(rtmMatch[2]), 10);
+    let year = cleanOcrDigits(rtmMatch[3]);
+    if (year.length === 2) year = '20' + year;
+    const yearNum = parseInt(year, 10);
+
+    if (month && day >= 1 && day <= 31 && yearNum >= 2000 && yearNum <= 2040) {
+      return `${yearNum}-${month}-${String(day).padStart(2, '0')}`;
+    }
+  }
+
+  // Pattern C: Format numerik (DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, YYYY/MM/DD, DD/MM/YY)
+  const numClean = clean.replace(/[\s\-_.]+/g, '/').replace(/\/+/g, '/');
+  const parts = numClean.split('/');
+
+  if (parts.length >= 3) {
+    let p0 = cleanOcrDigits(parts[0]);
+    let p1 = cleanOcrDigits(parts[1]);
+    let p2 = cleanOcrDigits(parts[2]).slice(0, 4);
+
+    if (p0 && p1 && p2) {
+      // Case 1: YYYY/MM/DD
+      if (p0.length === 4) {
+        let year = parseInt(p0, 10);
+        let month = parseInt(p1, 10);
+        let day = parseInt(p2, 10);
+        if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 2000 && year <= 2040) {
+          return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        }
+      }
+
+      // Case 2: DD/MM/YYYY atau DD/MM/YY (Standar SPBU Indonesia)
+      let day = parseInt(p0, 10);
+      let month = parseInt(p1, 10);
+      let year = p2.length === 2 ? parseInt('20' + p2, 10) : parseInt(p2, 10);
+
+      // Tangani kemungkinan bulan dan hari tertukar (misal MM/DD/YYYY dari sistem POS tertentu)
+      if (month > 12 && day <= 12) {
+        const temp = day;
+        day = month;
+        month = temp;
+      }
+
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 2000 && year <= 2040) {
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Normalisasi string jam apa pun (HH:MM:SS, HH.MM, 14:20:00, 2:30 PM) menjadi format 'HH:MM'
+ */
+export function normalizeTimeToHHMM(rawTime) {
+  if (!rawTime) return '';
+  let str = String(rawTime).trim().toUpperCase();
+
+  str = str.replace(/^(?:JAM|WAKTU|TIME|PADA|AT|TRX\s*TIME)[\s:=#]*/i, '').trim();
+
+  const isPM = /PM\b/i.test(str);
+  const isAM = /AM\b/i.test(str);
+  str = str.replace(/\s*(?:AM|PM|WIB|WITA|WIT)\b/gi, '').trim();
+
+  str = str.replace(/[\s.]+/g, ':');
+  const match = str.match(/([0-2]?[0-9A-Z])[:]([0-5][0-9A-Z])(?::([0-5][0-9A-Z]))?/);
+  if (match) {
+    let hour = parseInt(cleanOcrDigits(match[1]), 10);
+    let min = parseInt(cleanOcrDigits(match[2]), 10);
+
+    if (isPM && hour < 12) hour += 12;
+    if (isAM && hour === 12) hour = 0;
+
+    if (Number.isFinite(hour) && Number.isFinite(min) && hour >= 0 && hour <= 23 && min >= 0 && min <= 59) {
+      return `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Ekstraksi Tanggal & Jam multi-pass dari teks struk SPBU Indonesia
+ */
+export function extractDateAndTimeFromReceipt(rawText, lines = [], normalizedRaw = '') {
+  let foundDate = '';
+  let foundTime = '';
+
+  const timeRegex = /(?:(?:JAM|WAKTU|TIME|PADA|AT)[\s:=#]*)?([0-2]?[0-9A-Z][:.\s][0-5][0-9A-Z](?:[:.\s][0-5][0-9A-Z])?(?:\s*(?:AM|PM|WIB|WITA|WIT))?)/i;
+
+  // Pass 1: Cari pada baris yang memiliki label tanggal eksplisit (prioritas tertinggi)
+  const labeledDateLines = lines.filter(l => 
+    /(?:TGL|TANGGAL|DATE|DATETIME|WAKTU|TIME|TRANSAKSI|TRX\s*DATE|PRINTED|CETAK)/i.test(l)
+  );
+
+  for (const line of labeledDateLines) {
+    // Coba format tanggal teks (mis. 22-Sep-2026 atau 22/Sep/26)
+    const textDateMatch = line.match(/([0-3]?[0-9][\s\-_/.]+[A-Za-z]{3,10}[\s\-_/.]+(?:20)?[0-9]{2,4})/);
+    if (textDateMatch) {
+      const parsed = normalizeDateToIso(textDateMatch[1]);
+      if (parsed) {
+        foundDate = parsed;
+        const timeMatch = line.slice(textDateMatch.index + textDateMatch[0].length).match(timeRegex) || line.match(timeRegex);
+        if (timeMatch && !foundTime) {
+          foundTime = normalizeTimeToHHMM(timeMatch[1]);
+        }
+        break;
+      }
+    }
+
+    // Coba format numerik (mis. 22/09/2026 atau 22-09-2026 atau 2026-09-22)
+    const numDateMatch = line.match(/([0-3]?[0-9][\s\-_/.][0-1]?[0-9][\s\-_/.](?:20)?[0-9]{2,4})/) ||
+                         line.match(/(20[0-9]{2}[\s\-_/.][0-1]?[0-9][\s\-_/.][0-3]?[0-9])/);
+    if (numDateMatch) {
+      const parsed = normalizeDateToIso(numDateMatch[1]);
+      if (parsed) {
+        foundDate = parsed;
+        const timeMatch = line.slice(numDateMatch.index + numDateMatch[0].length).match(timeRegex) || line.match(timeRegex);
+        if (timeMatch && !foundTime) {
+          foundTime = normalizeTimeToHHMM(timeMatch[1]);
+        }
+        break;
+      }
+    }
+
+    // Jika baris hanya punya jam
+    if (!foundTime) {
+      const timeMatch = line.match(timeRegex);
+      if (timeMatch) foundTime = normalizeTimeToHHMM(timeMatch[1]);
+    }
+  }
+
+  // Pass 2: Jika belum ketemu di baris berlabel, cari di seluruh baris
+  if (!foundDate) {
+    for (const line of lines) {
+      // 1. Tanggal format nama bulan
+      const textDateMatch = line.match(/([0-3]?[0-9][\s\-_/.]+[A-Za-z]{3,10}[\s\-_/.]+(?:20)?[0-9]{2,4})/);
+      if (textDateMatch) {
+        const parsed = normalizeDateToIso(textDateMatch[1]);
+        if (parsed) {
+          foundDate = parsed;
+          if (!foundTime) {
+            const timeMatch = line.match(timeRegex);
+            if (timeMatch) foundTime = normalizeTimeToHHMM(timeMatch[1]);
+          }
+          break;
+        }
+      }
+
+      // 2. Tanggal format angka
+      const numDateMatch = line.match(/([0-3]?[0-9][\s\-_/.][0-1]?[0-9][\s\-_/.](?:20)?[0-9]{2,4})/) ||
+                           line.match(/(20[0-9]{2}[\s\-_/.][0-1]?[0-9][\s\-_/.][0-3]?[0-9])/);
+      if (numDateMatch) {
+        const parsed = normalizeDateToIso(numDateMatch[1]);
+        if (parsed) {
+          foundDate = parsed;
+          if (!foundTime) {
+            const timeMatch = line.match(timeRegex);
+            if (timeMatch) foundTime = normalizeTimeToHHMM(timeMatch[1]);
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  // Pass 3: Jika jam belum ketemu, cari di seluruh baris
+  if (!foundTime) {
+    for (const line of lines) {
+      const timeMatch = line.match(timeRegex);
+      if (timeMatch) {
+        const parsed = normalizeTimeToHHMM(timeMatch[1]);
+        if (parsed) {
+          foundTime = parsed;
+          break;
+        }
+      }
+    }
+  }
+
+  // Pass 4: Fallback ke rawText jika baris terpotong
+  if (!foundDate && rawText) {
+    const rawMatch = rawText.match(/([0-3]?[0-9][\s\-_/.][0-1]?[0-9][\s\-_/.](?:20)?[0-9]{2,4})/) ||
+                     rawText.match(/([0-3]?[0-9][\s\-_/.]+[A-Za-z]{3,10}[\s\-_/.]+(?:20)?[0-9]{2,4})/);
+    if (rawMatch) {
+      foundDate = normalizeDateToIso(rawMatch[1]);
+    }
+  }
+
+  return {
+    date: foundDate,
+    time: foundTime
+  };
+}
+
+export function normalizeDate(rawDate) {
+  return normalizeDateToIso(rawDate) || '';
 }
 
 function createEmptyResult() {

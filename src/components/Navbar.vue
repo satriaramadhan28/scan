@@ -56,26 +56,31 @@ const priceModeIcon = computed(() => {
     <div class="navbar-container">
       <!-- Logo & Brand -->
       <div class="brand-group" @click="$emit('change-tab', 'scanner')">
-        <div class="logo-icon">
-          <Fuel class="icon-brand" :size="24" />
+        <div class="logo-icon-wrapper">
+          <div class="logo-icon">
+            <Fuel class="icon-brand" :size="20" />
+          </div>
         </div>
         <div class="brand-text">
           <div class="brand-title">
-            Fuel<span>Scan</span>
-            <span class="badge-spbu">SPBU OCR</span>
+            Fuel<span class="gradient-text">Scan</span>
+            <span class="badge-spbu">
+              <span class="pulsing-dot"></span>
+              PRO OCR
+            </span>
           </div>
           <p class="brand-tagline">Deteksi Otomatis Nota Bensin SPBU</p>
         </div>
       </div>
 
-      <!-- Navigation Tabs -->
+      <!-- Navigation Tabs (SaaS Segmented Pill) -->
       <nav class="nav-links">
         <button
           class="nav-tab"
           :class="{ active: activeTab === 'scanner' }"
           @click="$emit('change-tab', 'scanner')"
         >
-          <Fuel :size="17" />
+          <Fuel :size="16" />
           <span>Pemindai Nota</span>
         </button>
 
@@ -84,7 +89,7 @@ const priceModeIcon = computed(() => {
           :class="{ active: activeTab === 'analytics' }"
           @click="$emit('change-tab', 'analytics')"
         >
-          <Sparkles :size="17" />
+          <Sparkles :size="16" />
           <span>Statistik BBM</span>
         </button>
 
@@ -93,7 +98,7 @@ const priceModeIcon = computed(() => {
           :class="{ active: activeTab === 'history' }"
           @click="$emit('change-tab', 'history')"
         >
-          <History :size="17" />
+          <History :size="16" />
           <span>Riwayat</span>
           <span v-if="savedCount > 0" class="nav-counter">{{ savedCount }}</span>
         </button>
@@ -101,7 +106,7 @@ const priceModeIcon = computed(() => {
 
       <!-- Action Buttons & User Profile Switcher -->
       <div class="header-actions">
-        <!-- Indikator Harga BBM (klik = perbarui sekarang) -->
+        <!-- Indikator Harga BBM -->
         <button
           class="price-status-chip"
           :class="fuelPriceStatus?.mode || 'bawaan'"
@@ -110,13 +115,13 @@ const priceModeIcon = computed(() => {
           @click="$emit('refresh-fuel-price')"
         >
           <RefreshCw :size="13" :class="{ 'spin-slow': isUpdatingPrices }" />
-          <span class="price-chip-text">
-            <span class="price-chip-title">Harga BBM {{ priceDateLabel }}</span>
+          <div class="price-chip-text">
+            <span class="price-chip-title">Harga {{ priceDateLabel }}</span>
             <span class="price-chip-sub">
               <component :is="priceModeIcon" :size="10" />
               {{ isUpdatingPrices ? 'Memperbarui...' : (fuelPriceStatus?.label || 'Harga bawaan') }}
             </span>
-          </span>
+          </div>
         </button>
 
         <!-- Active User Profile Switcher -->
@@ -125,7 +130,7 @@ const priceModeIcon = computed(() => {
           title="Ganti Pengguna / Driver Aktif"
           @click="$emit('open-users-modal')"
         >
-          <div class="nav-user-avatar" :style="{ backgroundColor: activeUser?.avatarColor || '#10b981' }">
+          <div class="nav-user-avatar" :style="{ backgroundColor: activeUser?.avatarColor || '#059669' }">
             {{ activeUser?.name?.charAt(0) || 'U' }}
           </div>
           <div class="nav-user-info">
@@ -136,11 +141,11 @@ const priceModeIcon = computed(() => {
 
         <!-- Sample Receipts Quick Button -->
         <button 
-          class="btn btn-secondary btn-sm"
+          class="btn btn-secondary btn-sm sample-btn"
           title="Buka Contoh Struk SPBU"
           @click="$emit('open-samples-modal')"
         >
-          <BookOpen :size="15" />
+          <BookOpen :size="14" />
           <span class="btn-text-responsive">Contoh Struk</span>
         </button>
 
@@ -151,8 +156,8 @@ const priceModeIcon = computed(() => {
           title="Pengaturan Mesin AI (Qwen / Gemini / Tesseract)"
           @click="$emit('open-api-modal')"
         >
-          <Bot v-if="currentEngine === 'qwen'" :size="15" class="text-cyan" />
-          <Key v-else :size="15" :class="{ 'text-emerald': hasApiKey }" />
+          <Bot v-if="currentEngine === 'qwen'" :size="14" class="text-cyan" />
+          <Key v-else :size="14" :class="{ 'text-emerald': hasApiKey }" />
           <span class="engine-badge">{{ currentEngine === 'qwen' ? 'Qwen AI' : (currentEngine === 'gemini' ? 'Gemini AI' : 'Tesseract') }}</span>
         </button>
       </div>
@@ -162,20 +167,19 @@ const priceModeIcon = computed(() => {
 
 <style scoped>
 .navbar-wrapper {
-  background: rgba(10, 15, 29, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: #ffffff;
   border-bottom: 1px solid var(--border-color);
   position: sticky;
   top: 0;
   z-index: 50;
-  padding: 10px 0;
+  padding: 11px 0;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04);
 }
 
 .navbar-container {
-  max-width: 1280px;
+  max-width: 1320px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -190,92 +194,112 @@ const priceModeIcon = computed(() => {
   user-select: none;
 }
 
+.logo-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .logo-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.25);
 }
 
 .brand-title {
   font-family: var(--font-display);
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.02em;
-  color: #ffffff;
+  color: #0f172a;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.brand-title span {
-  color: var(--accent-emerald);
+.gradient-text {
+  color: #059669;
 }
 
 .badge-spbu {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 700;
-  padding: 2px 7px;
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  border-radius: 6px;
+  padding: 2px 8px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.03em;
+}
+
+.pulsing-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #059669;
 }
 
 .brand-tagline {
   font-size: 0.72rem;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
+/* Nav Links Segmented Container */
 .nav-links {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(19, 28, 51, 0.7);
-  padding: 4px;
-  border-radius: 12px;
+  gap: 4px;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
 }
 
 .nav-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  gap: 7px;
+  padding: 7px 16px;
   border-radius: 9px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.18s ease;
+  letter-spacing: -0.01em;
 }
 
 .nav-tab:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  color: #0f172a;
 }
 
 .nav-tab.active {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: #ffffff;
+  color: #059669;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
 }
 
 .nav-counter {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   padding: 1px 6px;
-  background: #10b981;
-  color: #000;
+  background: #059669;
+  color: #ffffff;
   font-weight: 800;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
 }
 
 .header-actions {
@@ -289,18 +313,20 @@ const priceModeIcon = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 10px 4px 5px;
-  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 12px 4px 5px;
+  background: #ffffff;
   border: 1px solid var(--border-color);
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: left;
+  box-shadow: var(--shadow-sm);
 }
 
 .user-profile-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(16, 185, 129, 0.4);
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
 }
 
 .nav-user-avatar {
@@ -323,9 +349,9 @@ const priceModeIcon = computed(() => {
 .nav-user-name {
   font-size: 0.78rem;
   font-weight: 700;
-  color: #fff;
+  color: #0f172a;
   line-height: 1.1;
-  max-width: 100px;
+  max-width: 105px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -338,70 +364,43 @@ const priceModeIcon = computed(() => {
 }
 
 .text-emerald {
-  color: #10b981;
+  color: #059669;
 }
 
 .text-cyan {
-  color: #38bdf8;
+  color: #0284c7;
 }
 
 .has-key {
-  border-color: rgba(6, 182, 212, 0.4);
+  border-color: #a7f3d0;
+  background: #ecfdf5;
 }
 
 .engine-badge {
   font-size: 0.75rem;
   font-family: var(--font-mono);
-}
-
-@media (max-width: 980px) {
-  .btn-text-responsive {
-    display: none;
-  }
-  .brand-tagline {
-    display: none;
-  }
-  .nav-user-role {
-    display: none;
-  }
-}
-
-@media (max-width: 720px) {
-  .nav-user-name {
-    display: none;
-  }
-  .user-profile-btn {
-    padding: 3px;
-  }
-  .nav-tab span {
-    display: none;
-  }
-  .navbar-container {
-    padding: 0 10px;
-  }
-  .price-chip-text {
-    display: none;
-  }
+  font-weight: 600;
 }
 
 /* Indikator harga BBM */
 .price-status-chip {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
+  gap: 8px;
+  padding: 5px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(56, 189, 248, 0.1);
-  border: 1px solid rgba(56, 189, 248, 0.28);
-  color: #7dd3fc;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  color: #0284c7;
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: left;
 }
 
 .price-status-chip:hover:not(:disabled) {
-  background: rgba(56, 189, 248, 0.2);
-  color: #bae6fd;
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  transform: translateY(-1px);
 }
 
 .price-status-chip:disabled {
@@ -410,14 +409,14 @@ const priceModeIcon = computed(() => {
 }
 
 .price-status-chip.otomatis {
-  background: rgba(16, 185, 129, 0.12);
-  border-color: rgba(16, 185, 129, 0.32);
-  color: #34d399;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
 }
 
 .price-status-chip.otomatis:hover:not(:disabled) {
-  background: rgba(16, 185, 129, 0.22);
-  color: #6ee7b7;
+  background: #d1fae5;
+  border-color: #6ee7b7;
 }
 
 .price-chip-text {
@@ -437,7 +436,7 @@ const priceModeIcon = computed(() => {
   align-items: center;
   gap: 4px;
   font-size: 0.6rem;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .spin-slow {
@@ -447,5 +446,35 @@ const priceModeIcon = computed(() => {
 @keyframes spin-slow {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1020px) {
+  .btn-text-responsive {
+    display: none;
+  }
+  .brand-tagline {
+    display: none;
+  }
+  .nav-user-role {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .nav-user-name {
+    display: none;
+  }
+  .user-profile-btn {
+    padding: 3px;
+  }
+  .nav-tab span {
+    display: none;
+  }
+  .navbar-container {
+    padding: 0 12px;
+  }
+  .price-chip-text {
+    display: none;
+  }
 }
 </style>

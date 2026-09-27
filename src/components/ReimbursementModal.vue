@@ -177,6 +177,7 @@ function handleDownloadPdf() {
   justify-content: space-between;
   padding: 18px 24px;
   border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
 }
 
 .header-left {
@@ -188,11 +189,11 @@ function handleDownloadPdf() {
 .modal-title {
   font-size: 1.05rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .modal-sub {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
 }
 
@@ -202,12 +203,13 @@ function handleDownloadPdf() {
   color: var(--text-muted);
   cursor: pointer;
   padding: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
 }
 
 .close-btn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
 }
 
 .modal-body {
@@ -215,13 +217,14 @@ function handleDownloadPdf() {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  background: var(--bg-card);
 }
 
 .claim-summary-box {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   padding: 14px;
   border-radius: var(--radius-md);
@@ -236,16 +239,20 @@ function handleDownloadPdf() {
 .m-label {
   font-size: 0.72rem;
   color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .m-val {
   font-size: 1rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .claim-metric.highlight .m-val {
   font-size: 1.15rem;
+  color: var(--accent-emerald);
 }
 
 .claim-form-grid {
@@ -259,9 +266,9 @@ function handleDownloadPdf() {
 }
 
 .user-picker-box {
-  background: rgba(16, 185, 129, 0.05);
-  border: 1px solid rgba(16, 185, 129, 0.2);
-  padding: 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 12px;
   border-radius: var(--radius-sm);
 }
 
@@ -269,12 +276,12 @@ function handleDownloadPdf() {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(59, 130, 246, 0.08);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
   padding: 10px 14px;
   border-radius: var(--radius-sm);
   font-size: 0.78rem;
-  color: #93c5fd;
+  color: #1e40af;
 }
 
 .modal-footer {
@@ -284,7 +291,7 @@ function handleDownloadPdf() {
   gap: 10px;
   padding: 16px 24px;
   border-top: 1px solid var(--border-color);
-  background: rgba(13, 21, 39, 0.5);
+  background: var(--bg-secondary);
 }
 
 @media (max-width: 600px) {
