@@ -76,7 +76,29 @@ export function getSavedReceipts() {
   }
 }
 
-export function saveReceipt(receipt) {
+export async function saveReceipt(receipt) {
+  // 1. Simpan ke Database MySQL (melalui backend)
+  try {
+    const activeUser = getActiveUser();
+    const payload = {
+      ...receipt,
+      user_id: activeUser?.id === 'u1' ? 1 : activeUser?.id === 'u2' ? 2 : 1 // Mapping sederhana
+    };
+
+    const res = await fetch('http://localhost:3000/api/fuel-receipts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      console.warn('Backend save failed, only saving to local storage');
+    }
+  } catch (err) {
+    console.error('Database connection error:', err);
+  }
+
+  // 2. Simpan ke LocalStorage (sebagai cadangan)
   const receipts = getSavedReceipts();
   const existingIdx = receipts.findIndex(r => r.id === receipt.id);
   
@@ -93,6 +115,7 @@ export function saveReceipt(receipt) {
   localStorage.setItem(STORAGE_KEY_RECEIPTS, JSON.stringify(receipts));
   return receipts;
 }
+
 
 export function deleteReceipt(id) {
   const receipts = getSavedReceipts().filter(r => r.id !== id);
