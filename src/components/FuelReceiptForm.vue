@@ -209,8 +209,10 @@ watch(() => form.value.fuelBrand, (newBrand) => {
 function selectUser(user) {
   form.value.employeeName = user.name;
   form.value.department = user.department || 'Operasional';
+  form.value.user_id = user.id === 'u1' ? 1 : user.id === 'u2' ? 2 : user.id === 'u3' ? 3 : user.id === 'u4' ? 4 : 1;
   emitChange();
 }
+
 
 function selectFuelType(fuel) {
   form.value.fuelType = fuel.name;
