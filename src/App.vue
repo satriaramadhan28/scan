@@ -12,19 +12,23 @@ import UserManagementModal from './components/UserManagementModal.vue';
 import { performReceiptOCR } from './services/ocrService.js';
 import { extractFuelReceiptWithQwen } from './services/qwenService.js';
 import { extractFuelReceiptWithGemini } from './services/geminiService.js';
+import { extractFuelReceiptWithPaddle } from './services/paddleService.js';
 import {
   getSavedReceipts,
+  fetchReceiptsFromDb,
   saveReceipt as saveReceiptToDb,
   deleteReceipt as deleteReceiptFromDb,
   getQwenConfig,
   getGeminiApiKey,
   getAppSettings,
   getSavedUsers,
+  fetchUsersFromDb,
   getActiveUser,
   setActiveUser
 } from './services/storageService.js';
 import { parseFuelReceiptText, normalizeDateToIso, normalizeTimeToHHMM } from './services/spbuParser.js';
 import { fetchLatestFuelPrices, applyAutoPrices, getFuelPriceStatus, isFetchDue } from './services/fuelPriceUpdater.js';
+import { getFuelPriceList } from './services/fuelPrices.js';
 
 // State
 const activeTab = ref('scanner');
@@ -39,6 +43,10 @@ const currentEngine = ref('tesseract');
 const uploaderRef = ref(null);
 const rawOcrText = ref('');
 const showRawTextModal = ref(false);
+
+// Multi-Receipt Batch State (Untuk Budi kirim > 1 nota atau 1 foto 3 nota)
+const receiptBatch = ref([]);
+const activeBatchIndex = ref(0);
 
 // Harga BBM otomatis
 const fuelPriceStatus = ref(getFuelPriceStatus());
@@ -95,8 +103,8 @@ const currentReceipt = ref(getEmptyReceipt());
 
 function getEmptyReceipt() {
   const now = new Date();
-  const currentDriver = activeUser.value?.name || 'Budi Santoso';
-  const currentDept = activeUser.value?.department || 'Operasional';
+  const currentDriver = activeUser.value?.name || users.value?.[0]?.name || '';
+  const currentDept = activeUser.value?.department || users.value?.[0]?.department || 'Operasional';
 
   return {
     id: `fuel_${Date.now()}`,
@@ -122,22 +130,40 @@ function getEmptyReceipt() {
   };
 }
 
-onMounted(() => {
+onMounted(async () => {
   savedReceipts.value = getSavedReceipts();
   users.value = getSavedUsers();
   activeUser.value = getActiveUser();
 
-  if (currentReceipt.value && activeUser.value) {
+  // Sinkronisasi data riil langsung dari MySQL database scanota
+  try {
+    const dbUsers = await fetchUsersFromDb();
+    if (dbUsers && dbUsers.length > 0) {
+      users.value = dbUsers;
+    }
+    const dbReceipts = await fetchReceiptsFromDb();
+    if (dbReceipts && dbReceipts.length > 0) {
+      savedReceipts.value = dbReceipts;
+    }
+  } catch (err) {
+    console.warn('Sync DB scanota:', err);
+  }
+
+  if (activeUser.value) {
     currentReceipt.value.employeeName = activeUser.value.name;
     currentReceipt.value.department = activeUser.value.department;
+  } else if (users.value && users.value.length > 0) {
+    activeUser.value = users.value[0];
+    currentReceipt.value.employeeName = users.value[0].name;
+    currentReceipt.value.department = users.value[0].department;
   }
 
   const qwenConf = getQwenConfig();
   const geminiKey = getGeminiApiKey();
   const settings = getAppSettings();
 
-  // Default to tesseract if no API key is present for instant zero-config experience
-  currentEngine.value = settings.defaultEngine || 'tesseract';
+  // Default to paddleocr for instant 100% offline zero-config experience
+  currentEngine.value = settings.defaultEngine || 'paddleocr';
   hasApiKey.value = currentEngine.value === 'qwen' ? !!qwenConf.apiKey : (currentEngine.value === 'gemini' ? !!geminiKey : true);
 
   // Harga BBM: tarik otomatis kalau cache sudah kedaluwarsa (tanpa mengganggu UI)
@@ -145,16 +171,41 @@ onMounted(() => {
     syncFuelPrices({ silent: true });
   }
 
+  // Sinkronisasi otomatis saat jendela kembali difokuskan
   window.addEventListener('focus', handleWindowFocus);
+
+  // Polling latar belakang berkala (setiap 8 detik) agar data web selalu update otomatis tanpa reload
+  bgSyncInterval = setInterval(autoBackgroundSync, 8000);
 });
 
+let bgSyncInterval = null;
+
 onUnmounted(() => {
+  if (bgSyncInterval) clearInterval(bgSyncInterval);
   window.removeEventListener('focus', handleWindowFocus);
 });
 
-/** Saat pengguna kembali ke tab ini, cek apakah harga sudah perlu diperbarui lagi */
-function handleWindowFocus() {
+async function autoBackgroundSync() {
+  try {
+    const [freshUsers, freshReceipts] = await Promise.all([
+      fetchUsersFromDb(),
+      fetchReceiptsFromDb()
+    ]);
+    if (freshUsers && freshUsers.length) {
+      users.value = freshUsers;
+    }
+    if (freshReceipts && Array.isArray(freshReceipts)) {
+      savedReceipts.value = freshReceipts;
+    }
+  } catch (e) {
+    // Silent fail if network / backend momentarily unavailable
+  }
+}
+
+/** Saat pengguna kembali ke tab ini, cek pembaruan harga BBM & database secara otomatis */
+async function handleWindowFocus() {
   if (isFetchDue()) syncFuelPrices({ silent: true });
+  await autoBackgroundSync();
 }
 
 /** Dipanggil setelah pengguna menyimpan harga manual / mengganti mesin AI */
@@ -168,9 +219,28 @@ function handleSelectUser(user) {
   currentReceipt.value.department = user.department;
 }
 
-function handleUsersUpdated(updatedUsers) {
+async function handleUsersUpdated(updatedUsers) {
   users.value = updatedUsers;
   activeUser.value = getActiveUser();
+  if (activeUser.value) {
+    currentReceipt.value.employeeName = activeUser.value.name;
+    currentReceipt.value.department = activeUser.value.department;
+  } else if (updatedUsers.length > 0) {
+    activeUser.value = updatedUsers[0];
+    currentReceipt.value.employeeName = updatedUsers[0].name;
+    currentReceipt.value.department = updatedUsers[0].department;
+  } else {
+    activeUser.value = null;
+    currentReceipt.value.employeeName = '';
+  }
+
+  // Otomatis sinkronkan kembali riwayat dan badge driver dari database
+  try {
+    const freshReceipts = await fetchReceiptsFromDb();
+    if (freshReceipts && Array.isArray(freshReceipts)) {
+      savedReceipts.value = freshReceipts;
+    }
+  } catch (e) {}
 }
 
 function handleImageSelected(imgUrl) {
@@ -228,9 +298,16 @@ function mergeScanResult(current, scanned) {
     if ((merged[key] === '' || merged[key] == null) && current[key]) merged[key] = current[key];
   }
 
-  // PENTING: harga acuan tidak dipakai di sini. Nilai yang masuk ke form harus
-  // berasal dari nota. Kalau nota tidak memuat harga, biarkan 0 dan tandai untuk diperiksa.
+  // Kalkulasi silang otomatis dua arah (Volume = Total ÷ Harga, sebaliknya)
   const derived = [];
+  if (!Number(merged.pricePerLiter) && merged.fuelType) {
+    const list = getFuelPriceList();
+    const fuel = list.find(f => f.name === merged.fuelType);
+    if (fuel?.price) {
+      merged.pricePerLiter = fuel.price;
+      derived.push('pricePerLiter');
+    }
+  }
   if (!Number(merged.volumeLiters) && Number(merged.totalPrice) && Number(merged.pricePerLiter)) {
     merged.volumeLiters = parseFloat((merged.totalPrice / merged.pricePerLiter).toFixed(2));
     derived.push('volumeLiters');
@@ -265,6 +342,57 @@ function mergeScanResult(current, scanned) {
   return merged;
 }
 
+/**
+ * Pindai satu gambar nota menggunakan mesin OCR aktif
+ * (PaddleOCR lokal, Gemini AI, Qwen AI, atau Tesseract)
+ */
+async function scanImage(targetImgUrl, targetRawUrl) {
+  const qwenConf = getQwenConfig();
+  const geminiKey = getGeminiApiKey();
+  const settings = getAppSettings();
+  const engine = settings.defaultEngine || 'paddleocr';
+
+  // 1. PaddleOCR (Lokal Deep Learning - 100% Offline & No Limit)
+  if (engine === 'paddleocr') {
+    try {
+      const paddleResult = await extractFuelReceiptWithPaddle(targetRawUrl || targetImgUrl);
+      if (paddleResult.success && paddleResult.data) {
+        return {
+          success: true,
+          data: paddleResult.data,
+          rawText: paddleResult.rawText || '',
+          engine: 'PaddleOCR'
+        };
+      }
+    } catch (e) {
+      console.warn('PaddleOCR error, fallback to Tesseract:', e);
+    }
+  }
+  // 2. Gemini AI (Google Cloud Vision AI)
+  else if (engine === 'gemini') {
+    if (!geminiKey) throw new Error('API Key Google Gemini belum diatur. Masukkan di menu Pengaturan AI.');
+    const aiResult = await extractFuelReceiptWithGemini(targetRawUrl || targetImgUrl, geminiKey);
+    return aiResult;
+  }
+  // 3. Qwen AI Vision
+  else if (engine === 'qwen') {
+    if (!qwenConf.apiKey && qwenConf.provider !== 'custom') throw new Error('API Key Qwen belum diatur. Masukkan di menu Pengaturan AI.');
+    const qwenResult = await extractFuelReceiptWithQwen(targetRawUrl || targetImgUrl, qwenConf);
+    return qwenResult;
+  }
+
+  // 4. Local Tesseract Fallback
+  const res = await performReceiptOCR(targetImgUrl, (p) => {
+    scanProgress.value = p;
+  });
+  if (res.success && res.data) {
+    return { success: true, data: res.data, rawText: res.rawText || '', engine: 'Tesseract' };
+  } else {
+    const fallback = parseFuelReceiptText(res.rawText || '');
+    return { success: true, data: fallback, rawText: res.rawText || '', engine: 'Tesseract' };
+  }
+}
+
 async function handleStartOcr() {
   if (!currentImage.value) {
     alert('Silakan pilih atau ambil foto struk terlebih dahulu!');
@@ -272,78 +400,157 @@ async function handleStartOcr() {
   }
 
   isScanning.value = true;
-  scanProgress.value = { status: 'Mempersiapkan gambar struk...', progress: 0.1 };
+  scanProgress.value = { status: 'Mempersiapkan pemindaian nota...', progress: 0.1, currentItem: 1, totalItems: 1 };
 
   try {
-    const qwenConf = getQwenConfig();
-    const geminiKey = getGeminiApiKey();
-    const settings = getAppSettings();
-    const engine = settings.defaultEngine || 'tesseract';
-
-    let scanSuccess = false;
-
-    // 1. Try Qwen AI if enabled AND API key exists
-    if (engine === 'qwen' && (qwenConf.apiKey || qwenConf.provider === 'custom')) {
-      try {
-        scanProgress.value = { status: `Menganalisis dengan Qwen 2.5 VL AI...`, progress: 0.45 };
-        const qwenResult = await extractFuelReceiptWithQwen(imageForEngine(engine), qwenConf);
-        if (qwenResult.success && qwenResult.data) {
-          rawOcrText.value = qwenResult.rawText || '';
-          currentReceipt.value = mergeScanResult(currentReceipt.value, qwenResult.data);
-          scanSuccess = true;
-        }
-      } catch (qwenErr) {
-        console.warn('Qwen AI failed, falling back to Local OCR:', qwenErr);
-        scanProgress.value = { status: 'Qwen AI terkendala, beralih ke OCR Lokal Tesseract...', progress: 0.5 };
-        rawOcrText.value = `[CATATAN: Qwen AI gagal (${qwenErr.message}). Menggunakan OCR Lokal]`;
-      }
-    }
-
-    // 2. Try Gemini AI if enabled AND API key exists
-    else if (engine === 'gemini' && geminiKey) {
-      try {
-        scanProgress.value = { status: 'Menganalisis dengan Google Gemini AI Vision...', progress: 0.5 };
-        const aiResult = await extractFuelReceiptWithGemini(imageForEngine(engine), geminiKey);
-        if (aiResult.success && aiResult.data) {
-          rawOcrText.value = aiResult.rawText || '';
-          currentReceipt.value = mergeScanResult(currentReceipt.value, aiResult.data);
-          scanSuccess = true;
-        }
-      } catch (geminiErr) {
-        console.error('Gemini Error:', geminiErr);
-        alert('Gagal menggunakan Gemini AI! (Error: ' + geminiErr.message + '). Silakan cek API Key Anda atau coba Tesseract.');
-        scanProgress.value = { status: 'Gagal memproses dengan Gemini AI', progress: 0 };
-        isScanning.value = false;
-        return; // DONT fall back. Force user to see failure.
-      }
-    }
-
-    // 3. Reliable Local Tesseract OCR (Primary Default & Instant Fallback)
-    if (!scanSuccess) {
-      scanProgress.value = { status: 'Membaca karakter struk SPBU (Tesseract OCR)...', progress: 0.35 };
-
-      const result = await performReceiptOCR(currentImage.value, (p) => {
-        scanProgress.value = p;
-      });
-
-      if (result.success && result.data) {
-        rawOcrText.value = result.rawText || '';
-        currentReceipt.value = mergeScanResult(currentReceipt.value, result.data);
-        scanSuccess = true;
-      } else {
-        // Even if low confidence, parse raw text
-        const fallbackParsed = parseFuelReceiptText(result.rawText || '');
-        rawOcrText.value = result.rawText || '';
-        currentReceipt.value = mergeScanResult(currentReceipt.value, fallbackParsed);
+    const result = await scanImage(currentImage.value, currentRawImage.value);
+    if (result && result.data) {
+      rawOcrText.value = result.rawText || '';
+      currentReceipt.value = mergeScanResult(currentReceipt.value, result.data);
+      if (receiptBatch.value.length) {
+        receiptBatch.value[0].data = { ...currentReceipt.value };
+        receiptBatch.value[0].status = 'done';
       }
     }
   } catch (err) {
     console.error('Scan Error:', err);
-    alert('Catatan Pemindaian: Teks nota telah diproses. Silakan periksa atau lengkapi nilai di form kanan jika foto kurang jelas.');
+    alert('Catatan Pemindaian: ' + err.message);
   } finally {
     isScanning.value = false;
-    scanProgress.value = { status: '', progress: 0 };
+    scanProgress.value = { status: '', progress: 0, currentItem: 1, totalItems: 1 };
   }
+}
+
+async function handleStartBatchOcr({ mode, items, masterImage }) {
+  if (!items || !items.length) return;
+
+  isScanning.value = true;
+  const settings = getAppSettings();
+  const engine = settings.defaultEngine || 'paddleocr';
+
+  try {
+    // Opsi Khusus: 1 Foto Berisi 2-3 Nota dengan AI Vision (Gemini / Qwen)
+    if (mode === 'single_multi' && (engine === 'gemini' || engine === 'qwen') && masterImage) {
+      scanProgress.value = { 
+        status: `Menganalisis multi-nota dalam 1 foto dengan ${engine === 'gemini' ? 'Gemini 2.0 Flash' : 'Qwen'} AI...`, 
+        progress: 0.4, 
+        currentItem: 1, 
+        totalItems: 1 
+      };
+
+      try {
+        const aiMulti = await scanImage(masterImage, masterImage);
+        if (aiMulti.isMulti && Array.isArray(aiMulti.items) && aiMulti.items.length > 1) {
+          receiptBatch.value = aiMulti.items.map((itemData, idx) => ({
+            id: `ai_batch_${Date.now()}_${idx}`,
+            name: `Nota #${idx + 1} (${itemData.fuelType || 'SPBU'})`,
+            dataUrl: items[idx]?.dataUrl || masterImage,
+            rawUrl: items[idx]?.rawUrl || masterImage,
+            status: 'done',
+            rawText: JSON.stringify(itemData, null, 2),
+            data: mergeScanResult(getEmptyReceipt(), itemData)
+          }));
+          activeBatchIndex.value = 0;
+          currentReceipt.value = { ...receiptBatch.value[0].data };
+          currentImage.value = receiptBatch.value[0].dataUrl;
+          rawOcrText.value = receiptBatch.value[0].rawText;
+          return;
+        }
+      } catch (aiErr) {
+        console.warn('Vision multi-scan langsung gagal, beralih ke pemindaian per potongan nota:', aiErr);
+      }
+    }
+
+    // Proses per nota dalam batch (PaddleOCR, Tesseract, dan multi-file upload)
+    const total = items.length;
+    receiptBatch.value = items.map((it, i) => ({
+      ...it,
+      status: 'pending',
+      data: it.data || getEmptyReceipt()
+    }));
+
+    for (let i = 0; i < total; i++) {
+      const it = receiptBatch.value[i];
+      it.status = 'scanning';
+      scanProgress.value = {
+        status: `Memindai ${it.name || `Nota #${i + 1}`} (${i + 1} dari ${total})...`,
+        progress: (i + 0.3) / total,
+        currentItem: i + 1,
+        totalItems: total
+      };
+
+      try {
+        const res = await scanImage(it.dataUrl, it.rawUrl || it.dataUrl);
+        if (res && res.data) {
+          it.data = mergeScanResult(getEmptyReceipt(), res.data);
+          it.rawText = res.rawText || '';
+          it.status = 'done';
+        }
+      } catch (scanErr) {
+        console.warn(`Gagal memindai nota #${i + 1}:`, scanErr);
+        it.status = 'error';
+      }
+      scanProgress.value.progress = (i + 1) / total;
+    }
+
+    activeBatchIndex.value = 0;
+    currentReceipt.value = { ...receiptBatch.value[0].data };
+    currentImage.value = receiptBatch.value[0].dataUrl;
+    rawOcrText.value = receiptBatch.value[0].rawText || '';
+
+  } catch (err) {
+    console.error('Batch Scan Error:', err);
+    alert('Terjadi kendala saat memindai nota batch: ' + err.message);
+  } finally {
+    isScanning.value = false;
+    scanProgress.value = { status: '', progress: 0, currentItem: 1, totalItems: 1 };
+  }
+}
+
+function handleBatchUpdated(newItems) {
+  receiptBatch.value = newItems.map(item => ({
+    ...item,
+    data: item.data || getEmptyReceipt()
+  }));
+}
+
+function handleSelectBatchItem(idx) {
+  if (receiptBatch.value[idx]) {
+    activeBatchIndex.value = idx;
+    currentReceipt.value = { ...receiptBatch.value[idx].data };
+    currentImage.value = receiptBatch.value[idx].dataUrl;
+    currentRawImage.value = receiptBatch.value[idx].rawUrl;
+    rawOcrText.value = receiptBatch.value[idx].rawText || '';
+  }
+}
+
+function handleReceiptFormUpdate(updated) {
+  currentReceipt.value = updated;
+  if (receiptBatch.value[activeBatchIndex.value]) {
+    receiptBatch.value[activeBatchIndex.value].data = { ...updated };
+  }
+}
+
+async function handleSaveAllBatch() {
+  if (!receiptBatch.value.length) return;
+  let savedCount = 0;
+  const currentDriver = currentReceipt.value.employeeName || activeUser.value?.name || users.value?.[0]?.name || '';
+  const currentDept = currentReceipt.value.department || activeUser.value?.department || users.value?.[0]?.department || 'Operasional';
+  for (const item of receiptBatch.value) {
+    if (item.data && (item.data.totalPrice || item.data.spbuName)) {
+      const rec = {
+        ...item.data,
+        employeeName: item.data.employeeName || currentDriver,
+        department: item.data.department || currentDept,
+        imageUrl: item.dataUrl || currentImage.value || null
+      };
+      await saveReceiptToDb(rec);
+      savedCount++;
+    }
+  }
+  savedReceipts.value = await fetchReceiptsFromDb();
+  activeTab.value = 'history';
+  alert(`Berhasil menyimpan ${savedCount} nota bensin atas nama "${currentDriver}" ke Database & Riwayat Pengeluaran!`);
 }
 
 function handleSelectSample(sample) {
@@ -352,22 +559,50 @@ function handleSelectSample(sample) {
   if (uploaderRef.value) {
     uploaderRef.value.setImage(sample.imageUrl);
   }
+  const defaultDriver = activeUser.value?.name || users.value?.[0]?.name || '';
+  const defaultDept = activeUser.value?.department || users.value?.[0]?.department || 'Operasional';
   currentReceipt.value = {
     ...sample.data,
-    employeeName: currentReceipt.value.employeeName || activeUser.value?.name || 'Budi Santoso',
-    department: currentReceipt.value.department || activeUser.value?.department || 'Logistik',
+    employeeName: currentReceipt.value.employeeName || defaultDriver,
+    department: currentReceipt.value.department || defaultDept,
     id: `fuel_${Date.now()}`,
     ocrConfidence: 98
   };
 }
 
-function handleSaveReceipt(data) {
+async function handleSaveReceipt(data) {
+  const currentDriver = data.employeeName || currentReceipt.value.employeeName || activeUser.value?.name || users.value?.[0]?.name || '';
+  const currentDept = data.department || currentReceipt.value.department || activeUser.value?.department || users.value?.[0]?.department || 'Operasional';
+
   const receiptToSave = {
     ...data,
+    employeeName: currentDriver,
+    department: currentDept,
     imageUrl: data.imageUrl || currentImage.value || currentRawImage.value || null
   };
-  const updatedList = saveReceiptToDb(receiptToSave);
-  savedReceipts.value = updatedList;
+  const updated = await saveReceiptToDb(receiptToSave);
+  if (updated && Array.isArray(updated)) {
+    savedReceipts.value = updated;
+  } else {
+    savedReceipts.value = await fetchReceiptsFromDb();
+  }
+
+  // Alihkan langsung ke tab Riwayat Pengeluaran agar nota langsung terlihat
+  activeTab.value = 'history';
+}
+
+async function handleChangeTab(tab) {
+  activeTab.value = tab;
+  if (tab === 'history' || tab === 'analytics') {
+    try {
+      const freshReceipts = await fetchReceiptsFromDb();
+      if (freshReceipts && Array.isArray(freshReceipts)) {
+        savedReceipts.value = freshReceipts;
+      }
+    } catch (e) {
+      console.warn('Gagal sinkronisasi data riwayat dari database:', e);
+    }
+  }
 }
 
 function handleEditReceipt(receipt) {
@@ -381,28 +616,22 @@ function handleEditReceipt(receipt) {
   activeTab.value = 'scanner';
 }
 
-function handleDeleteReceipt(id) {
+async function handleDeleteReceipt(id) {
   if (confirm('Apakah Anda yakin ingin menghapus catatan nota ini?')) {
-    savedReceipts.value = deleteReceiptFromDb(id);
+    savedReceipts.value = await deleteReceiptFromDb(id);
   }
 }
 
 function handleResetForm() {
   currentReceipt.value = getEmptyReceipt();
   rawOcrText.value = '';
+  receiptBatch.value = [];
+  activeBatchIndex.value = 0;
   if (uploaderRef.value) {
     uploaderRef.value.clearImage();
   }
   currentImage.value = null;
   currentRawImage.value = null;
-}
-
-function onKeyUpdated(info) {
-  currentEngine.value = info.engine;
-  const qwenConf = getQwenConfig();
-  const geminiKey = getGeminiApiKey();
-  hasApiKey.value = currentEngine.value === 'qwen' ? !!qwenConf.apiKey : (currentEngine.value === 'gemini' ? !!geminiKey : true);
-  handleFuelPricesChanged();
 }
 </script>
 
@@ -415,7 +644,7 @@ function onKeyUpdated(info) {
       :has-api-key="hasApiKey"
       :current-engine="currentEngine"
       :active-user="activeUser"
-      @change-tab="activeTab = $event"
+      @change-tab="handleChangeTab"
       @open-api-modal="showApiModal = true"
       @open-samples-modal="showSamplesModal = true"
       @open-users-modal="showUsersModal = true"
@@ -436,9 +665,14 @@ function onKeyUpdated(info) {
               :is-scanning="isScanning"
               :scan-progress="scanProgress"
               :current-engine="currentEngine"
+              :batch-items="receiptBatch"
+              :active-batch-index="activeBatchIndex"
               @image-selected="handleImageSelected"
               @raw-image-selected="handleRawImageSelected"
               @start-ocr="handleStartOcr"
+              @start-batch-ocr="handleStartBatchOcr"
+              @batch-updated="handleBatchUpdated"
+              @select-batch-item="handleSelectBatchItem"
               @use-sample="showSamplesModal = true"
             />
 
@@ -459,9 +693,13 @@ function onKeyUpdated(info) {
             <FuelReceiptForm
               :form-data="currentReceipt"
               :users="users"
-              @update-data="currentReceipt = $event"
+              :batch-receipts="receiptBatch"
+              :active-batch-index="activeBatchIndex"
+              @update-data="handleReceiptFormUpdate"
               @save-receipt="handleSaveReceipt"
               @reset-form="handleResetForm"
+              @select-batch-item="handleSelectBatchItem"
+              @save-all-batch="handleSaveAllBatch"
               @open-users-modal="showUsersModal = true"
               @open-api-modal="showApiModal = true"
             />
@@ -583,9 +821,19 @@ function onKeyUpdated(info) {
   line-height: 1.5;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1024px) {
   .scanner-layout {
     grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .content-container {
+    padding: 0 12px;
+  }
+  .main-content {
+    padding: 16px 0 48px 0;
   }
 }
 </style>

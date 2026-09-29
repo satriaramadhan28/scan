@@ -140,10 +140,19 @@ Format JSON:
   "rawTextSummary": "Tulis ulang baris teks penting struk beserta angkanya"
 }
 
+>> PENTING UNTUK FOTO DENGAN BEBERAPA NOTA SEKALIGUS:
+Foto ini mungkin berisi 1 nota, ATAU LEBIH DARI 1 NOTA (misalnya 2 atau 3 struk dijajarkan berdampingan atau berurutan dalam satu foto).
+- Jika hanya ada 1 nota: Kembalikan 1 objek JSON seperti format di atas.
+- Jika ada 2 atau 3 nota dalam satu foto: Kembalikan JSON ARRAY berisi objek masing-masing nota terpisah dari kiri ke kanan / atas ke bawah:
+[
+  { "spbuName": "SPBU ...", "fuelType": "...", "volumeLiters": ..., "pricePerLiter": ..., "totalPrice": ..., ... },
+  { "spbuName": "SPBU ...", "fuelType": "...", "volumeLiters": ..., "pricePerLiter": ..., "totalPrice": ..., ... }
+]
+
 Aturan angka:
 - volumeLiters: desimal (3.13). pricePerLiter & totalPrice: bilangan bulat tanpa pemisah ribuan.
 - DILARANG mengarang. Kalau tidak ada di gambar, tulis 0.
-- HANYA keluarkan string JSON valid.`;
+- HANYA keluarkan string JSON valid (objek tunggal atau array).`;
 
   const requestBody = {
     contents: [
@@ -166,9 +175,9 @@ Aturan angka:
   };
 
   const modelsToTry = [
-    'gemini-1.5-flash',
     'gemini-2.0-flash',
-    'gemini-2.5-flash',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash-lite',
     'gemini-1.5-pro'
   ];
 

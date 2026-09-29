@@ -73,6 +73,9 @@ export function parseFuelReceiptText(rawText) {
     .replace(/\r/g, '')
     .replace(/[—–]/g, '-')
     .replace(/[|]/g, ' ')
+    // Fix OCR spaces inside numbers: e.g. "15. 950" -> "15.950", "50. 000" -> "50.000", "3. 13" -> "3.13"
+    .replace(/(\d+)[\.,]\s+(\d{3}\b)/g, '$1.$2')
+    .replace(/(\d+)[\.,]\s+(\d{1,2}\b)/g, '$1.$2')
     .trim();
 
   const lines = normalizedRaw.split('\n').map(l => l.trim()).filter(Boolean);
@@ -281,10 +284,20 @@ export function parseFuelReceiptText(rawText) {
     }
   }
 
-  // 3. Extract Total Price (Total Rp / Amount / Total Bayar / Grand Total)
+  // 3. Extract Total Price (Prioritas utama: "Dibayar Konsumen" / "CASH" / "Tunai")
+  const dibayarKonsumenMatch = normalizedRaw.match(/(?:DIBAYAR[\s\-_.]*KONSUMEN|DIBAYAR)[^\d\n]*\n?(?:RP\.?\s*)?([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i) ||
+                               normalizedRaw.match(/(?:CASH|TUNAI|QRIS|MYPERTAMINA)[^\d\n]*\n?(?:RP\.?\s*)?([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i);
+
+  if (dibayarKonsumenMatch) {
+    const val = parseIndonesianCurrency(dibayarKonsumenMatch[1]);
+    if (val >= 1000 && val <= 5000000) {
+      result.totalPrice = val;
+    }
+  }
+
   const totalPatterns = [
-    /(?:TOTAL[\s\-_.]*HARGA|TOTAL[\s\-_.]*RUPIAH|TOTAL[\s\-_.]*BAYAR|TOTAL[\s\-_.]*RP|TOTAL[\s\-_.]*PENJUALAN|GRAND[\s\-_.]*TOTAL|JUMLAH[\s\-_.]*RP|TOTAL[\s\-_.]*AMOUNT|SALE[\s\-_.]*AMOUNT|TOTAL[\s\-_.]*|AMOUNT)[\s:=.]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i,
-    /(?:EDC\s*BCA|EDC\s*MANDIRI|EDC|BAYAR|TUNAI|CASH|QRIS)[\s:=.]*RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i,
+    /(?:TOTAL[\s\-_.]*HARGA|TAL[\s\-_.]*HARG[A-Za-z]*|TOTAL[\s\-_.]*RUPIAH|TOTAL[\s\-_.]*BAYAR|TOTAL[\s\-_.]*RP|GRAND[\s\-_.]*TOTAL|JUMLAH[\s\-_.]*RP|TOTAL[\s\-_.]*AMOUNT|SALE[\s\-_.]*AMOUNT)[^\d\n]*\n?(?:[A-Z\s]*\n)?(?:RP\.?\s*)?([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i,
+    /(?:TOTAL|AMOUNT)[^\d\n]*\n?(?:[A-Z\s]*\n)?(?:RP\.?\s*)?([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i,
     /RP\.?\s*([0-9]{2,3}[\.,][0-9]{3})/i
   ];
 
@@ -292,6 +305,11 @@ export function parseFuelReceiptText(rawText) {
     for (const pattern of totalPatterns) {
       const match = normalizedRaw.match(pattern);
       if (match) {
+        // Jangan ambil baris "Tanpa Subsidi" jika ada kata subsidi di sekitarnya
+        const matchIdx = match.index;
+        const surrounding = normalizedRaw.slice(Math.max(0, matchIdx - 20), matchIdx + 40).toUpperCase();
+        if (surrounding.includes('TANPA') || surrounding.includes('NON SUBSIDI')) continue;
+
         const val = parseIndonesianCurrency(match[1]);
         if (val >= 1000 && val <= 5000000) {
           result.totalPrice = val;
@@ -313,13 +331,14 @@ export function parseFuelReceiptText(rawText) {
     }
   }
 
-  // Direct line search for "Amount 25000" / "Amount: 25.000" / "Total 25000"
+  // Standalone numbers on receipt line (e.g. "50.000" below CASH / total)
   if (!result.totalPrice) {
     for (const l of lines) {
-      const amtMatch = l.match(/(?:AMOUNT|TOTAL|SALE|JUMLAH|BAYAR)[\s:=]+RP?\.?\s*([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})/i);
-      if (amtMatch && !isNonTotalLine(l)) {
-        const val = parseIndonesianCurrency(amtMatch[1]);
-        if (val >= 1000 && val <= 5000000) {
+      if (isNonTotalLine(l)) continue;
+      const numMatch = l.match(/^[RP\s.]*([0-9]{1,3}\.[0-9]{3})$/i) || l.match(/^[RP\s.]*([0-9]{1,3},[0-9]{3})$/i);
+      if (numMatch) {
+        const val = parseIndonesianCurrency(numMatch[1]);
+        if (val >= 10000 && val <= 2000000 && val !== result.pricePerLiter) {
           result.totalPrice = val;
           break;
         }
@@ -329,7 +348,7 @@ export function parseFuelReceiptText(rawText) {
 
   // 4. Extract Price Per Liter (Unit Price / Harga / Liter)
   const pricePerLiterPatterns = [
-    /(?:UNIT[\s\-_]*PRICE|HARGA[A-Za-z\s\/]*LITER|HARGA[A-Za-z\s\/]*L|PRICE[A-Za-z\s\/]*L|HARGA\/LTR|HRG\/LITER|PRICE)[^\d]*(?:RP\.?\s*)?([0-9]{1,2}[\.,][0-9]{3}|[0-9]{4,5})/i,
+    /(?:UNIT[\s\-_]*PRICE|HARGA[A-Za-z\s\/]*LITER|HARGA[A-Za-z\s\/]*L|PRICE[A-Za-z\s\/]*L|HARGA\/LTR|HRG\/LITER|PRICE|RPA\/LITER|RPA|HRA|HRQ|HRG|HGA)[^\d\n]*\n?[^\d]*(?:RP\.?\s*)?([0-9]{1,2}[\.,][0-9]{3}|[0-9]{4,5})/i,
     /(?:RP\.?[\s]*)?([0-9]{1,2}[\.,][0-9]{3}|[0-9]{4,5})\s*[\/]\s*(?:L|LTR|LITER)/i,
     /@[\s]*([0-9]{1,2}[\.,][0-9]{3}|[0-9]{4,5})/i,
     /([0-9]{1,2}[\.,][0-9]{3})\b.*(?:LITER|LTR|L)\b/i
@@ -346,44 +365,145 @@ export function parseFuelReceiptText(rawText) {
     }
   }
 
-  // 5. Extract Volume (Volume / Qty / Liter)
-  const labeledVolume = lines.map(l => l.match(/(?:VOLUME|VOL|QTY|JUMLAH\s*LITER|LITER|TOTAL\s*VOL)\s*[:=]?\s*(?:\([A-Z0-9]\)\s*)?([0-9]{1,3}[,.]\s?[0-9]{1,3})/i)).find(Boolean);
-  if (labeledVolume) {
-    const val = parseIndonesianFloat(labeledVolume[1]);
-    if (val > 0.1 && val < 500) result.volumeLiters = parseFloat(val.toFixed(2));
-  }
-
-  if (!result.volumeLiters) {
-    const volumePatterns = [
-      /(?:VOLUME|VOL|QTY|LITER)[\s:=]*(?:\([^)]*\))?\s*([0-9]{1,3}[,\.][0-9]{1,3})/i,
-      /([0-9]{1,3}[,\.][0-9]{2,3})\s*(?:LTR|LITER|L)\b/i,
-      /\b([0-9]{1,3}[,.]\s?[0-9]{2,3})\s*(?:L|LTR|LITER)\b/i
-    ];
-
-    for (const pattern of volumePatterns) {
-      const match = normalizedRaw.match(pattern);
-      if (match) {
-        const val = parseIndonesianFloat(match[1]);
-        if (val > 0.1 && val < 500) {
-          result.volumeLiters = parseFloat(val.toFixed(2));
-          break;
+  // Check lines right below fuel type for Price Per Liter
+  if (!result.pricePerLiter && result.fuelType) {
+    const fuelIdx = lines.findIndex(l => /PERTAMAX|PERTALITE|DEXLITE|SOLAR|BP\s*92|BP\s*ULTIMATE|REVVO|V\-POWER/i.test(l));
+    if (fuelIdx !== -1) {
+      for (let offset = 1; offset <= 3 && fuelIdx + offset < lines.length; offset++) {
+        const candidateLine = lines[fuelIdx + offset];
+        const numMatch = candidateLine.match(/([0-9]{1,2}[\.,][0-9]{3}|[0-9]{4,5})/);
+        if (numMatch) {
+          const val = parseIndonesianCurrency(numMatch[1]);
+          if (val >= 5000 && val <= 35000 && val !== result.totalPrice) {
+            result.pricePerLiter = val;
+            break;
+          }
         }
       }
     }
   }
 
-  // Auto-calculate missing values (hanya kalau 2 dari 3 nilai benar-benar terbaca)
-  const filledCount = [result.totalPrice, result.pricePerLiter, result.volumeLiters].filter(v => v > 0).length;
-  if (filledCount >= 2) {
-    if (result.totalPrice > 0 && result.pricePerLiter > 0 && !result.volumeLiters) {
-      result.volumeLiters = parseFloat((result.totalPrice / result.pricePerLiter).toFixed(2));
+  // 5. Extract Volume (Volume / Qty / Liter)
+  for (const l of lines) {
+    if (/HARGA|HRG|RPA|HRA|PRICE|RATE|PER/i.test(l)) continue;
+    const volMatch = l.match(/(?:VOLUME|VOL|QTY|JUMLAH\s*LITER)\s*[:=]?\s*(?:\([A-Z0-9]\)\s*)?([0-9]{1,3}[,.]\s?[0-9]{1,3})/i)
+      || l.match(/\(L\)\s*[:=]?\s*([0-9]{1,3}[,\.][0-9]{1,3})/i)
+      || l.match(/\b([0-9]{1,3}[,\.][0-9]{1,3})\s*(?:LTR|LITER|L)\b/i);
+    if (volMatch) {
+      const val = parseIndonesianFloat(volMatch[1]);
+      if (val > 0.1 && val < 500 && Math.round(val * 1000) !== result.pricePerLiter) {
+        result.volumeLiters = parseFloat(val.toFixed(2));
+        break;
+      }
+    }
+  }
+
+  // Multi-line check for Volume
+  if (!result.volumeLiters) {
+    const multiVolMatch = normalizedRaw.match(/(?:VOLUME|VOL|QTY)\s*[:=]?\s*\n\s*(?:\([A-Z0-9]\)\s*)?([0-9]{1,3}[,\.][0-9]{1,3})/i);
+    if (multiVolMatch) {
+      const val = parseIndonesianFloat(multiVolMatch[1]);
+      if (val > 0.1 && val < 500) {
+        result.volumeLiters = parseFloat(val.toFixed(2));
+      }
+    }
+  }
+
+  // 5.5. Numeric Triplet Resolver for Cropped / Unlabeled Receipts
+  const floatCandidates = [];
+  const currencyCandidates = [];
+
+  for (const l of lines) {
+    if (/SPBU|DATE|WAKTU|TIME|SHIFT|TRANS|TELP|KASIR|OPERATOR|SELAMAT|TERIMA|PAKAL|RAYA/i.test(l)) continue;
+
+    const fMatches = l.matchAll(/\b([0-9]{1,3}[,\.][0-9]{1,3})\b/g);
+    for (const m of fMatches) {
+      const val = parseFloat(m[1].replace(',', '.'));
+      if (val >= 0.2 && val <= 250) {
+        floatCandidates.push({ line: l, val });
+      }
+    }
+
+    const nums = l.match(/\b([0-9]{1,3}(?:[\.,][0-9]{3})+|[0-9]{4,7})\b/g);
+    if (nums) {
+      for (const n of nums) {
+        const intVal = parseInt(n.replace(/[^\d]/g, ''), 10);
+        if (intVal >= 5000 && intVal <= 3000000) {
+          currencyCandidates.push({ line: l, val: intVal });
+        }
+      }
+    }
+  }
+
+  // A. Search for best Triplet: candidate_vol * candidate_price ≈ candidate_total
+  let bestTriplet = null;
+  let bestDiff = 0.05; // 5% max tolerance
+
+  for (const f of floatCandidates) {
+    for (const c1 of currencyCandidates) {
+      for (const c2 of currencyCandidates) {
+        if (c1.val === c2.val) continue;
+        const price = Math.min(c1.val, c2.val);
+        const total = Math.max(c1.val, c2.val);
+
+        if (price >= 5000 && price <= 35000 && total >= 10000) {
+          const expectedTotal = f.val * price;
+          const diff = Math.abs(expectedTotal - total) / total;
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestTriplet = { volume: f.val, price, total };
+          }
+        }
+      }
+    }
+  }
+
+  if (bestTriplet) {
+    if (!result.volumeLiters) result.volumeLiters = bestTriplet.volume;
+    if (!result.pricePerLiter) result.pricePerLiter = bestTriplet.price;
+    if (!result.totalPrice) result.totalPrice = bestTriplet.total;
+  }
+
+  // B. Mathematical derivation if at least 2 are present or known from fuel default
+  if (!result.volumeLiters && result.totalPrice > 0 && result.pricePerLiter > 0) {
+    result.volumeLiters = parseFloat((result.totalPrice / result.pricePerLiter).toFixed(2));
+    result.volumeDerived = true;
+  } else if (!result.totalPrice && result.volumeLiters > 0 && result.pricePerLiter > 0) {
+    result.totalPrice = Math.round(result.volumeLiters * result.pricePerLiter);
+    result.totalDerived = true;
+  } else if (!result.pricePerLiter && result.totalPrice > 0 && result.volumeLiters > 0) {
+    result.pricePerLiter = Math.round(result.totalPrice / result.volumeLiters);
+    result.priceDerived = true;
+  } else if (!result.volumeLiters && result.totalPrice > 0 && result.fuelType) {
+    const knownFuel = FUEL_TYPES.find(f => f.name === result.fuelType);
+    if (knownFuel?.defaultPrice) {
+      if (!result.pricePerLiter) result.pricePerLiter = knownFuel.defaultPrice;
+      let matchedFloat = null;
+      for (const f of floatCandidates) {
+        const diff = Math.abs((f.val * knownFuel.defaultPrice) - result.totalPrice) / result.totalPrice;
+        if (diff < 0.05) {
+          matchedFloat = f.val;
+          break;
+        }
+      }
+      result.volumeLiters = matchedFloat || parseFloat((result.totalPrice / knownFuel.defaultPrice).toFixed(2));
       result.volumeDerived = true;
-    } else if (result.volumeLiters > 0 && result.pricePerLiter > 0 && !result.totalPrice) {
-      result.totalPrice = Math.round(result.volumeLiters * result.pricePerLiter);
-      result.totalDerived = true;
-    } else if (result.totalPrice > 0 && result.volumeLiters > 0 && !result.pricePerLiter) {
-      result.pricePerLiter = Math.round(result.totalPrice / result.volumeLiters);
-      result.priceDerived = true;
+    }
+  } else if (!result.totalPrice && currencyCandidates.length > 0) {
+    const knownFuel = FUEL_TYPES.find(f => f.name === result.fuelType);
+    const price = result.pricePerLiter || knownFuel?.defaultPrice;
+    if (price) {
+      for (const c of currencyCandidates) {
+        if (c.val >= 10000 && c.val !== price) {
+          result.totalPrice = c.val;
+          if (!result.pricePerLiter) result.pricePerLiter = price;
+          if (!result.volumeLiters) {
+            result.volumeLiters = parseFloat((c.val / price).toFixed(2));
+            result.volumeDerived = true;
+          }
+          break;
+        }
+      }
     }
   }
 
@@ -417,6 +537,18 @@ export function parseFuelReceiptText(rawText) {
   const pumpMatch = normalizedRaw.match(/(?:PULAU[A-Za-z\s\/]*POMPA|POMPA|PUMP(?:\s*NO\.?)?|PULAU\/POMPA|PULAU)[\s:=#\.]*([0-9lLiIoO]{1,3})/i);
   if (pumpMatch) {
     result.pumpNo = cleanOcrNumber(pumpMatch[1]).padStart(2, '0');
+  } else {
+    const pumpLineIdx = lines.findIndex(l => /^(?:PUMP|POMPA|PULAU)/i.test(l.trim()));
+    if (pumpLineIdx !== -1) {
+      for (let offset = 1; offset <= 3 && pumpLineIdx + offset < lines.length; offset++) {
+        const nextL = lines[pumpLineIdx + offset].trim();
+        const isolatedDigit = nextL.match(/^0?([0-9]{1,2})$/);
+        if (isolatedDigit) {
+          result.pumpNo = isolatedDigit[1].padStart(2, '0');
+          break;
+        }
+      }
+    }
   }
   const nozzleMatch = normalizedRaw.match(/(?:NOZZLE|SELANG|NOZ?|NOZEL)[\s:=#\.]*([0-9lLiIoO]{1,3})/i);
   if (nozzleMatch) {
@@ -934,6 +1066,44 @@ function createEmptyResult() {
     needsReview: true,
     reviewFields: ['spbuName', 'fuelType', 'volumeLiters', 'pricePerLiter', 'totalPrice']
   };
+}
+
+/**
+ * Memecah teks mentah OCR bila memuat lebih dari 1 struk SPBU
+ * (misal bila 1 foto memuat 2 atau 3 nota berdampingan/berurutan).
+ */
+export function splitMultiReceiptRawText(rawText) {
+  if (!rawText || typeof rawText !== 'string') return [];
+  const lines = rawText.split('\n');
+  const chunks = [];
+  let currentChunk = [];
+
+  const isStartMarker = (line) => {
+    const l = line.trim().toUpperCase();
+    return /\bSPBU\b|\bPERTAMINA\b|\bPT\s*ANEKA\s*PETROINDO\b|\bBP\-AKR\b|\bPT\s*SHELL\b|\bPT\s*VIVO\b/.test(l);
+  };
+
+  for (const line of lines) {
+    if (isStartMarker(line) && currentChunk.length > 5) {
+      chunks.push(currentChunk.join('\n'));
+      currentChunk = [line];
+    } else {
+      currentChunk.push(line);
+    }
+  }
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join('\n'));
+  }
+
+  return chunks.length > 1 ? chunks : [rawText];
+}
+
+export function parseMultiFuelReceiptText(rawText) {
+  const chunks = splitMultiReceiptRawText(rawText);
+  if (chunks.length <= 1) {
+    return [parseFuelReceiptText(rawText)];
+  }
+  return chunks.map(chunk => parseFuelReceiptText(chunk));
 }
 
 

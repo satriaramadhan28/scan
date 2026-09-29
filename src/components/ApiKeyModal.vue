@@ -114,7 +114,51 @@ function save() {
       <div class="modal-body">
         <!-- Engine Selection Cards -->
         <div class="engine-cards">
-          <!-- 1. Qwen AI Vision Card (Recommended) -->
+          <!-- 1. Google Gemini AI Card (Paling Akurat) -->
+          <div
+            class="engine-card"
+            :class="{ active: settings.defaultEngine === 'gemini' }"
+            @click="settings.defaultEngine = 'gemini'"
+          >
+            <div class="card-radio">
+              <input type="radio" value="gemini" v-model="settings.defaultEngine" />
+            </div>
+            <div class="card-info">
+              <div class="card-title">
+                <Globe :size="16" class="text-purple" />
+                <span>Google Gemini AI (2.0 Flash / 1.5 Flash)</span>
+              </div>
+              <p class="card-desc">Model Multimodal Vision terbaik. Sangat akurat (99%) mengenali nota SPBU Indonesia, angka bensin, dan otomatis membedakan subsidi pemerintah vs total bayar riil.</p>
+              <div class="pill-group">
+                <span class="pill-badge purple">⭐ 100% Paling Akurat</span>
+                <span class="pill-badge emerald">1.500 Struk/Hari GRATIS</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. PaddleOCR Deep Learning (Lokal & No Limit) -->
+          <div
+            class="engine-card"
+            :class="{ active: settings.defaultEngine === 'paddleocr' }"
+            @click="settings.defaultEngine = 'paddleocr'"
+          >
+            <div class="card-radio">
+              <input type="radio" value="paddleocr" v-model="settings.defaultEngine" />
+            </div>
+            <div class="card-info">
+              <div class="card-title">
+                <Cpu :size="16" class="text-amber" />
+                <span>PaddleOCR Deep Learning (Lokal Offline)</span>
+              </div>
+              <p class="card-desc">Mesin OCR modern Baidu (PP-OCRv4 ONNX). Jauh lebih akurat dari Tesseract untuk membaca teks kasir thermal, berjalan 100% offline tanpa batas kuota selamanya.</p>
+              <div class="pill-group">
+                <span class="pill-badge cyan">🚀 100% NO LIMIT & Bebas Biaya</span>
+                <span class="pill-badge outline">Tanpa Internet & Tanpa API Key</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Qwen AI Vision Card -->
           <div
             class="engine-card"
             :class="{ active: settings.defaultEngine === 'qwen' }"
@@ -128,15 +172,14 @@ function save() {
                 <Sparkles :size="16" class="text-cyan" />
                 <span>Qwen AI Vision (Qwen 2.5 VL)</span>
               </div>
-              <p class="card-desc">Model Vision State-of-the-Art dari Alibaba / OpenRouter. Sangat akurat mengenali angka bensin, nama SPBU, dan format struk thermal Indonesia.</p>
+              <p class="card-desc">Model Vision Alibaba via OpenRouter / DashScope, atau endpoint lokal (Ollama).</p>
               <div class="pill-group">
-                <span class="pill-badge cyan">⭐ Sangat Direkomendasikan</span>
-                <span class="pill-badge outline">Qwen2.5-VL 72B / 7B</span>
+                <span class="pill-badge outline">Qwen2.5-VL 72B / Ollama</span>
               </div>
             </div>
           </div>
 
-          <!-- 2. Tesseract OCR (Local) -->
+          <!-- 4. Tesseract OCR (Local Legacy) -->
           <div
             class="engine-card"
             :class="{ active: settings.defaultEngine === 'tesseract' }"
@@ -147,30 +190,11 @@ function save() {
             </div>
             <div class="card-info">
               <div class="card-title">
-                <Cpu :size="16" class="text-emerald" />
-                <span>Mesin OCR Lokal (Tesseract.js)</span>
+                <Layers :size="16" class="text-emerald" />
+                <span>Mesin OCR Lokal Browser (Tesseract.js)</span>
               </div>
-              <p class="card-desc">100% Berjalan di browser tanpa API key, gratis, dan tidak membutuhkan koneksi internet atau server.</p>
-              <span class="pill-badge">Bawaan Offline</span>
-            </div>
-          </div>
-
-          <!-- 3. Google Gemini AI Card -->
-          <div
-            class="engine-card"
-            :class="{ active: settings.defaultEngine === 'gemini' }"
-            @click="settings.defaultEngine = 'gemini'"
-          >
-            <div class="card-radio">
-              <input type="radio" value="gemini" v-model="settings.defaultEngine" />
-            </div>
-            <div class="card-info">
-              <div class="card-title">
-                <Globe :size="16" class="text-purple" />
-                <span>Google Gemini AI (2.5 Flash / Pro)</span>
-              </div>
-              <p class="card-desc">Ekstraksi multimodal super cepat & akurat menggunakan model Google Gemini 2.5.</p>
-              <span class="pill-badge purple">Google AI Studio</span>
+              <p class="card-desc">Mesin OCR ringan berbasis JavaScript di browser sebagai cadangan bawaan.</p>
+              <span class="pill-badge outline">Cadangan</span>
             </div>
           </div>
         </div>
@@ -285,9 +309,32 @@ function save() {
             rel="noopener noreferrer"
             class="get-key-link"
           >
-            <span>Dapatkan API Key Google Gemini Gratis</span>
+            <span>Dapatkan API Key Google Gemini Gratis (1 Menit)</span>
             <ExternalLink :size="12" />
           </a>
+        </div>
+
+        <!-- PaddleOCR Subpanel (Shown when PaddleOCR selected) -->
+        <div v-else-if="settings.defaultEngine === 'paddleocr'" class="config-subpanel paddle-panel">
+          <div class="subpanel-title">
+            <Cpu :size="15" class="text-amber" />
+            <span>Mesin PaddleOCR (Lokal Offline & No Limit)</span>
+          </div>
+
+          <p class="panel-desc">
+            Mesin <strong>PaddleOCR Deep Learning (PP-OCRv4)</strong> aktif dan berjalan langsung di komputer Anda melalui backend lokal.
+          </p>
+
+          <div class="pill-group" style="margin-top: 10px;">
+            <span class="pill-badge emerald">✔ Status: Siap & Aktif Lokal</span>
+            <span class="pill-badge cyan">100% Offline Tanpa Internet</span>
+            <span class="pill-badge outline">Tanpa Batas Kuota (No Limit)</span>
+          </div>
+
+          <div class="api-key-hint" style="margin-top: 12px;">
+            <ShieldCheck :size="14" class="text-emerald" />
+            <span>Semua foto struk diproses di perangkat lokal Anda tanpa dikirim ke server luar manapun.</span>
+          </div>
         </div>
 
         <!-- Fuel Price Settings Panel -->

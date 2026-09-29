@@ -32,18 +32,76 @@ export function parseAiReceiptResponse(textResponse, engineName) {
 
   // Buang pagar markdown ```json ... ``` lalu ambil blok JSON terluar
   const cleaned = String(textResponse).replace(/```(?:json)?/gi, ' ').trim();
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Respons model tidak memuat JSON: ' + cleaned.slice(0, 120));
 
-  const parsed = JSON.parse(match[0]);
+  let parsed = null;
+  const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+  const objMatch = cleaned.match(/\{[\s\S]*\}/);
+
+  if (arrayMatch && (!objMatch || cleaned.indexOf('[') < cleaned.indexOf('{'))) {
+    try {
+      parsed = JSON.parse(arrayMatch[0]);
+    } catch {
+      // fallback
+    }
+  }
+
+  if (!parsed && objMatch) {
+    try {
+      parsed = JSON.parse(objMatch[0]);
+    } catch (e) {
+      throw new Error('Gagal mem-parsing JSON AI: ' + e.message);
+    }
+  }
+
+  if (!parsed) {
+    throw new Error('Respons model tidak memuat JSON: ' + cleaned.slice(0, 120));
+  }
+
+  // Jika AI mengembalikan array beberapa nota
+  if (Array.isArray(parsed)) {
+    const list = parsed.map(item => {
+      const d = normalizeAiFields(item);
+      d.ocrConfidence = 95;
+      d.engine = engineName;
+      return d;
+    });
+    return {
+      success: true,
+      isMulti: list.length > 1,
+      items: list,
+      data: list[0] || null,
+      rawText: JSON.stringify(list, null, 2)
+    };
+  }
+
+  // Jika AI mengembalikan objek pembungkus { receipts: [ ... ] }
+  const innerList = parsed.receipts || parsed.notas || parsed.items;
+  if (Array.isArray(innerList) && innerList.length > 0) {
+    const list = innerList.map(item => {
+      const d = normalizeAiFields(item);
+      d.ocrConfidence = 95;
+      d.engine = engineName;
+      return d;
+    });
+    return {
+      success: true,
+      isMulti: list.length > 1,
+      items: list,
+      data: list[0] || null,
+      rawText: parsed.rawTextSummary || JSON.stringify(list, null, 2)
+    };
+  }
+
   const data = normalizeAiFields(parsed);
   data.ocrConfidence = 95;
   data.engine = engineName;
 
   return {
     success: true,
-    rawText: parsed.rawTextSummary || JSON.stringify(data, null, 2),
-    data
+    isMulti: false,
+    items: [data],
+    data,
+    rawText: parsed.rawTextSummary || JSON.stringify(data, null, 2)
   };
 }
 

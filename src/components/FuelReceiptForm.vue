@@ -14,12 +14,14 @@ import {
   Sparkles, 
   User, 
   Users, 
-  UserPlus
+  UserPlus,
+  AlertTriangle,
+  CheckCircle2,
+  Info
 } from 'lucide-vue-next';
 import { FUEL_TYPES } from '../services/spbuParser.js';
 import { getFuelPriceList, compareToOfficialPrice, verifyReceiptTotal, FUEL_PRICE_UPDATED_AT, FUEL_PRICE_REGION, PRICE_TOLERANCE_PERCENT } from '../services/fuelPrices.js';
 import { formatRupiah, formatNumber } from '../services/pdfExportService.js';
-import confetti from 'canvas-confetti';
 
 const props = defineProps({
   formData: {
@@ -33,16 +35,43 @@ const props = defineProps({
   users: {
     type: Array,
     default: () => []
+  },
+  batchReceipts: {
+    type: Array,
+    default: () => []
+  },
+  activeBatchIndex: {
+    type: Number,
+    default: 0
   }
 });
 
-const emit = defineEmits(['update-data', 'save-receipt', 'reset-form', 'open-users-modal']);
+const emit = defineEmits([
+  'update-data', 
+  'save-receipt', 
+  'reset-form', 
+  'open-users-modal', 
+  'open-api-modal',
+  'select-batch-item',
+  'save-all-batch'
+]);
 
 const form = ref({ ...props.formData });
 const copied = ref(false);
 const saveFeedback = ref(false);
 
 const fuelList = ref(getFuelPriceList());
+
+// Batch Summary Computed
+const batchTotalAmount = computed(() => {
+  if (!props.batchReceipts?.length) return 0;
+  return props.batchReceipts.reduce((sum, item) => sum + (Number(item.data?.totalPrice) || 0), 0);
+});
+
+const batchTotalVolume = computed(() => {
+  if (!props.batchReceipts?.length) return 0;
+  return props.batchReceipts.reduce((sum, item) => sum + (Number(item.data?.volumeLiters) || 0), 0);
+});
 
 // Tanggal berlaku harga (format ramah baca, mis. "2 Sep 2026")
 const priceUpdatedLabel = computed(() => {
@@ -143,20 +172,32 @@ watch(() => props.formData, (newVal) => {
   if (signature !== lastSyncedSignature) {
     lastSyncedSignature = signature;
     form.value = { ...newVal };
-    volumeText.value = formatVolumeInput(newVal.volumeLiters);
-    priceText.value = formatRupiahInput(newVal.pricePerLiter);
-    totalText.value = formatRupiahInput(newVal.totalPrice);
+    // Mathematical auto-fill if 2 are present and 1 is missing
+    if (!Number(form.value.volumeLiters) && Number(form.value.totalPrice) && Number(form.value.pricePerLiter)) {
+      form.value.volumeLiters = parseFloat((form.value.totalPrice / form.value.pricePerLiter).toFixed(2));
+    } else if (!Number(form.value.pricePerLiter) && Number(form.value.totalPrice) && Number(form.value.volumeLiters)) {
+      form.value.pricePerLiter = Math.round(form.value.totalPrice / form.value.volumeLiters);
+    } else if (!Number(form.value.totalPrice) && Number(form.value.volumeLiters) && Number(form.value.pricePerLiter)) {
+      form.value.totalPrice = Math.round(form.value.volumeLiters * form.value.pricePerLiter);
+    }
+    volumeText.value = formatVolumeInput(form.value.volumeLiters);
+    priceText.value = formatRupiahInput(form.value.pricePerLiter);
+    totalText.value = formatRupiahInput(form.value.totalPrice);
   }
 }, { deep: true });
 
-// Auto-sync Total = Volume x HargaPerLiter (hanya saat pengguna mengubah manual)
+// Auto-sync Total = Volume x HargaPerLiter (dua arah dinamis)
 function onVolumeChange() {
   const vol = Number(form.value.volumeLiters) || 0;
   const price = Number(form.value.pricePerLiter) || 0;
+  const tot = Number(form.value.totalPrice) || 0;
   if (vol > 0 && price > 0) {
     form.value.totalPrice = Math.round(vol * price);
+    totalText.value = formatRupiahInput(form.value.totalPrice);
+  } else if (vol > 0 && tot > 0 && !price) {
+    form.value.pricePerLiter = Math.round(tot / vol);
+    priceText.value = formatRupiahInput(form.value.pricePerLiter);
   }
-  totalText.value = formatRupiahInput(form.value.totalPrice);
   clearReviewedFlag();
   emitChange();
 }
@@ -164,10 +205,14 @@ function onVolumeChange() {
 function onPricePerLiterChange() {
   const vol = Number(form.value.volumeLiters) || 0;
   const price = Number(form.value.pricePerLiter) || 0;
+  const tot = Number(form.value.totalPrice) || 0;
   if (vol > 0 && price > 0) {
     form.value.totalPrice = Math.round(vol * price);
+    totalText.value = formatRupiahInput(form.value.totalPrice);
+  } else if (tot > 0 && price > 0 && !vol) {
+    form.value.volumeLiters = parseFloat((tot / price).toFixed(2));
+    volumeText.value = formatVolumeInput(form.value.volumeLiters);
   }
-  totalText.value = formatRupiahInput(form.value.totalPrice);
   clearReviewedFlag();
   emitChange();
 }
@@ -175,8 +220,13 @@ function onPricePerLiterChange() {
 function onTotalChange() {
   const tot = Number(form.value.totalPrice) || 0;
   const price = Number(form.value.pricePerLiter) || 0;
+  const vol = Number(form.value.volumeLiters) || 0;
   if (tot > 0 && price > 0) {
     form.value.volumeLiters = parseFloat((tot / price).toFixed(2));
+    volumeText.value = formatVolumeInput(form.value.volumeLiters);
+  } else if (tot > 0 && vol > 0 && !price) {
+    form.value.pricePerLiter = Math.round(tot / vol);
+    priceText.value = formatRupiahInput(form.value.pricePerLiter);
   }
   clearReviewedFlag();
   emitChange();
@@ -209,7 +259,8 @@ watch(() => form.value.fuelBrand, (newBrand) => {
 function selectUser(user) {
   form.value.employeeName = user.name;
   form.value.department = user.department || 'Operasional';
-  form.value.user_id = user.id === 'u1' ? 1 : user.id === 'u2' ? 2 : user.id === 'u3' ? 3 : user.id === 'u4' ? 4 : 1;
+  form.value.user_id = user.db_id || parseInt(String(user.id).replace(/[^0-9]/g, '')) || 1;
+  form.value.id_pengisi_bbm = form.value.user_id;
   emitChange();
 }
 
@@ -245,15 +296,9 @@ function emitChange() {
 function handleSave() {
   emit('save-receipt', form.value);
   saveFeedback.value = true;
-  confetti({
-    particleCount: 50,
-    spread: 60,
-    origin: { y: 0.8 },
-    colors: ['#10b981', '#34d399', '#60a5fa']
-  });
   setTimeout(() => {
     saveFeedback.value = false;
-  }, 2500);
+  }, 2000);
 }
 
 function copyReceiptSummary() {
@@ -295,19 +340,51 @@ const fuelBadgeColor = computed(() => {
 
       <div class="header-badges">
         <button class="price-date-badge" :title="`Harga BBM acuan: ${FUEL_PRICE_REGION}. Berlaku sejak ${priceUpdatedLabel}. Ubah di menu Pengaturan.`" @click="$emit('open-api-modal')">
-          <Sparkles :size="12" />
-          Harga BBM {{ priceUpdatedLabel }}
+          <Calendar :size="12" />
+          <span>Harga BBM {{ priceUpdatedLabel }}</span>
         </button>
         <span v-if="form.ocrConfidence" class="confidence-badge">
-          <Sparkles :size="13" />
-          Akurasi {{ form.ocrConfidence }}%
+          <CheckCircle2 :size="12" />
+          <span>Akurasi {{ form.ocrConfidence }}%</span>
         </span>
+      </div>
+    </div>
+
+    <!-- Batch Navigator Bar (Jika ada lebih dari 1 nota terdeteksi/terpindai) -->
+    <div v-if="batchReceipts && batchReceipts.length > 1" class="batch-navigator-card">
+      <div class="batch-summary-row">
+        <div class="batch-summary-left">
+          <span class="batch-summary-title">Kumpulan Nota Terpindai ({{ batchReceipts.length }} Nota)</span>
+          <span class="batch-summary-chip">
+            Total: <strong>{{ formatRupiah(batchTotalAmount) }}</strong> · {{ formatNumber(batchTotalVolume) }} Ltr
+          </span>
+        </div>
+        <button class="btn btn-primary btn-sm save-all-batch-btn" @click="$emit('save-all-batch')">
+          <Save :size="14" /> Simpan Semua Nota ({{ batchReceipts.length }})
+        </button>
+      </div>
+
+      <div class="batch-tabs-strip">
+        <button
+          v-for="(item, bIdx) in batchReceipts"
+          :key="item.id || bIdx"
+          class="batch-tab-item"
+          :class="{ active: activeBatchIndex === bIdx }"
+          @click="$emit('select-batch-item', bIdx)"
+        >
+          <span class="batch-tab-num">Nota #{{ bIdx + 1 }}</span>
+          <span class="batch-tab-fuel">{{ item.data?.fuelType?.split(' (')[0] || item.name || 'BBM' }}</span>
+          <span class="batch-tab-price">{{ formatRupiah(item.data?.totalPrice || 0) }}</span>
+        </button>
       </div>
     </div>
 
     <!-- Peringatan Data Perlu Diperiksa -->
     <div v-if="showReviewBanner" class="review-banner">
-      <div class="review-title">⚠️ Ada data yang perlu diperiksa</div>
+      <div class="review-title">
+        <AlertTriangle :size="15" />
+        <span>Perhatian: Ada data yang perlu diperiksa</span>
+      </div>
       <ul class="review-list">
         <li v-if="form.needsReview && form.reviewFields?.length">
           Tidak terbaca dari nota: <strong>{{ (form.reviewFields || []).join(', ') }}</strong>. Isi manual — sistem sengaja tidak mengisi angka apa pun agar laporan tidak salah.
@@ -330,12 +407,12 @@ const fuelBadgeColor = computed(() => {
 
     <!-- Informasi Ketersediaan / Subsidi -->
     <div v-if="isUnavailableFuel" class="fuel-note warn">
-      ⛽ <strong>{{ form.fuelType }}</strong> tercatat <strong>belum tersedia</strong> di SPBU sejak awal 2026.
-      Harga di bawah hanya harga terakhir yang dipasang. Pastikan nota benar-benar produk ini.
+      <AlertTriangle :size="14" class="fuel-note-icon" />
+      <span><strong>{{ form.fuelType }}</strong> tercatat belum tersedia di SPBU sejak awal 2026. Harga di bawah hanya harga terakhir yang dipasang.</span>
     </div>
     <div v-else-if="isSubsidizedFuel" class="fuel-note ok">
-      🟢 <strong>{{ form.fuelType }}</strong> adalah BBM subsidi — harganya tetap
-      {{ formatRupiah(activeFuel?.price) }}/L di seluruh Indonesia.
+      <CheckCircle2 :size="14" class="fuel-note-icon" />
+      <span><strong>{{ form.fuelType }}</strong> adalah BBM subsidi — harga resmi acuan {{ formatRupiah(activeFuel?.price) }}/L di seluruh Indonesia.</span>
     </div>
 
     <!-- Pilihan Nama Pengguna / Driver -->
@@ -415,7 +492,7 @@ const fuelBadgeColor = computed(() => {
         <input
           type="text"
           v-model="form.employeeName"
-          placeholder="Cth: Budi Santoso"
+          placeholder="Cth: Nama Pengemudi"
           class="form-input"
           @input="emitChange"
         />
@@ -613,7 +690,7 @@ const fuelBadgeColor = computed(() => {
 
       <div class="action-right">
         <button 
-          class="btn btn-primary btn-lg save-main-btn pulse-emerald" 
+          class="btn btn-primary btn-lg save-main-btn" 
           @click="handleSave"
         >
           <Check v-if="saveFeedback" :size="20" />
@@ -666,16 +743,109 @@ const fuelBadgeColor = computed(() => {
   color: var(--text-secondary);
 }
 
-.confidence-badge {
+/* Batch Navigator Card */
+.batch-navigator-card {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.batch-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.batch-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.batch-summary-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.batch-summary-chip {
+  font-size: 0.76rem;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.save-all-batch-btn {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border-color: #0f172a !important;
+  font-weight: 700;
+}
+
+.batch-tabs-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.batch-tab-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px;
-  background: #ecfdf5;
-  color: #059669;
-  border: 1px solid #a7f3d0;
+  padding: 6px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-xs);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.batch-tab-item:hover {
+  border-color: #0f172a;
+  color: #0f172a;
+}
+
+.batch-tab-item.active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.batch-tab-num {
+  font-weight: 700;
+}
+
+.batch-tab-price {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  opacity: 0.9;
+}
+
+.confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  background: #f1f5f9;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
   border-radius: var(--radius-full);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 700;
   font-family: var(--font-mono);
 }
@@ -692,23 +862,22 @@ const fuelBadgeColor = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 10px;
+  padding: 3px 9px;
   border-radius: var(--radius-full);
-  background: #f0f9ff;
-  color: #0284c7;
-  border: 1px solid #bae6fd;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   font-family: var(--font-mono);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .price-date-badge:hover {
-  background: #e0f2fe;
-  color: #0369a1;
-  border-color: #7dd3fc;
-  transform: translateY(-1px);
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
 }
 
 /* Banner data perlu diperiksa */
@@ -1051,11 +1220,11 @@ const fuelBadgeColor = computed(() => {
 
 /* Total Hero Card */
 .total-hero-group {
-  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
-  border: 1.5px solid #a7f3d0;
-  border-radius: var(--radius-lg);
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: var(--radius-md);
   padding: 16px 20px;
-  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.08);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
   position: relative;
   overflow: hidden;
 }
@@ -1068,18 +1237,18 @@ const fuelBadgeColor = computed(() => {
 }
 
 .hero-label {
-  font-family: var(--font-display);
-  font-size: 0.88rem;
-  font-weight: 800;
-  color: #065f46;
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #94a3b8;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 .formula-hint {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-family: var(--font-mono);
-  color: #047857;
+  color: #34d399;
   font-weight: 600;
 }
 
@@ -1090,22 +1259,26 @@ const fuelBadgeColor = computed(() => {
 }
 
 .total-rp {
-  font-size: 1.45rem;
-  font-weight: 800;
-  color: #059669;
-  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #64748b;
+  font-family: var(--font-mono);
 }
 
 .total-input {
-  font-size: 1.65rem;
-  font-weight: 800;
-  color: #064e3b;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #ffffff;
   background: transparent;
   border: none;
   outline: none;
   width: 100%;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   letter-spacing: -0.02em;
+}
+
+.total-input::placeholder {
+  color: #475569;
 }
 
 /* Form Actions */
@@ -1128,6 +1301,19 @@ const fuelBadgeColor = computed(() => {
 
 .save-main-btn {
   min-width: 260px;
+  background: #0f172a;
+  color: #ffffff;
+  border: 1px solid #0f172a;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  transition: all 0.2s ease;
+}
+
+.save-main-btn:hover {
+  background: #1e293b;
+  border-color: #1e293b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
 }
 
 @media (max-width: 720px) {

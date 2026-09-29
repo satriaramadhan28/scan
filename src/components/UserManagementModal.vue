@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { 
   Users, 
   X, 
@@ -11,12 +11,13 @@ import {
   Briefcase,
   Sparkles
 } from 'lucide-vue-next';
-import { getSavedUsers, saveUser, deleteUser, setActiveUser } from '../services/storageService.js';
+import { getSavedUsers, fetchUsersFromDb, saveUser, deleteUser, setActiveUser } from '../services/storageService.js';
 
 const emit = defineEmits(['close', 'users-updated', 'select-user']);
 
 const users = ref(getSavedUsers());
 const showAddForm = ref(false);
+const isSubmitting = ref(false);
 
 const newUserName = ref('');
 const newUserRole = ref('Driver Operasional');
@@ -24,28 +25,44 @@ const newUserDept = ref('Logistik');
 
 const AVATAR_COLORS = ['#10b981', '#3b82f6', '#ec4899', '#f59e0b', '#8b5cf6', '#06b6d4'];
 
-function handleAddUser() {
-  if (!newUserName.value.trim()) return;
+onMounted(async () => {
+  try {
+    const dbUsers = await fetchUsersFromDb();
+    if (dbUsers && dbUsers.length > 0) {
+      users.value = dbUsers;
+    }
+  } catch (err) {
+    console.warn('Load users from DB:', err);
+  }
+});
 
-  const randomColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
-  const user = {
-    id: `user_${Date.now()}`,
-    name: newUserName.value.trim(),
-    role: newUserRole.value.trim() || 'Driver',
-    department: newUserDept.value.trim() || 'Operasional',
-    avatarColor: randomColor
-  };
+async function handleAddUser() {
+  if (!newUserName.value.trim() || isSubmitting.value) return;
+  isSubmitting.value = true;
 
-  const updated = saveUser(user);
-  users.value = updated;
-  newUserName.value = '';
-  showAddForm.value = false;
-  emit('users-updated', updated);
+  try {
+    const randomColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+    const user = {
+      name: newUserName.value.trim(),
+      role: newUserRole.value.trim() || 'Driver Operasional',
+      department: newUserDept.value.trim() || 'Logistik',
+      avatarColor: randomColor
+    };
+
+    const updated = await saveUser(user);
+    users.value = updated;
+    newUserName.value = '';
+    showAddForm.value = false;
+    emit('users-updated', updated);
+  } finally {
+    isSubmitting.value = false;
+  }
 }
 
-function handleDeleteUser(id) {
-  if (confirm('Hapus profil nama ini?')) {
-    const updated = deleteUser(id);
+async function handleDeleteUser(targetUser) {
+  const name = typeof targetUser === 'object' ? targetUser.name : targetUser;
+  if (confirm(`Hapus profil "${name}" dari database?`)) {
+    const updated = await deleteUser(targetUser);
     users.value = updated;
     emit('users-updated', updated);
   }
@@ -93,12 +110,12 @@ function handleSelect(user) {
             </div>
 
             <div class="user-actions" @click.stop>
-              <button 
-                v-if="users.length > 1" 
-                class="icon-delete" 
-                title="Hapus Nama"
-                @click="handleDeleteUser(u.id)"
-              >
+                <button 
+                  v-if="users.length > 1" 
+                  class="icon-delete" 
+                  title="Hapus Nama dari Database"
+                  @click="handleDeleteUser(u)"
+                >
                 <Trash2 :size="15" />
               </button>
               <button class="btn btn-outline-emerald btn-sm" @click="handleSelect(u)">

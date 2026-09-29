@@ -32,7 +32,7 @@ const userList = computed(() => props.users.length ? props.users : getSavedUsers
 const initialActive = getActiveUser();
 
 const form = ref({
-  employeeName: initialActive?.name || 'Budi Santoso',
+  employeeName: initialActive?.name || userList.value[0]?.name || '',
   department: initialActive?.department || 'Divisi Operasional & Logistik',
   companyName: 'PT Nusantara Jaya Abadi',
   plateNumber: 'B 1234 ABC',

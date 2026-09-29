@@ -11,12 +11,15 @@ import {
   AlertCircle, 
   Calendar, 
   User, 
+  Users,
   Fuel, 
   RotateCcw, 
   X,
   FileText,
   FileSpreadsheet,
-  Loader2
+  Loader2,
+  Eye,
+  Image as ImageIcon
 } from 'lucide-vue-next';
 import { formatRupiah, formatNumber, exportReceiptsToCsv } from '../services/pdfExportService.js';
 import { FUEL_TYPES } from '../services/spbuParser.js';
@@ -42,6 +45,66 @@ const selectedPeriodFilter = ref('all');
 const selectedFuelFilter = ref('all');
 const selectedIds = ref(new Set());
 const showExportPdfModal = ref(false);
+
+// Modal Preview Foto Nota
+const previewModalImage = ref(null);
+const previewModalTitle = ref('');
+
+function openReceiptImageModal(receipt) {
+  previewModalImage.value = receipt.imageUrl || null;
+  previewModalTitle.value = `${receipt.employeeName || 'Nota'} - ${receipt.spbuName || 'SPBU'} (${receipt.date || ''})`;
+}
+
+function closeReceiptImageModal() {
+  previewModalImage.value = null;
+  previewModalTitle.value = '';
+}
+
+// Rekap daftar seluruh nama pengemudi / pengguna terdaftar beserta jumlah nota aslinya
+const availableDrivers = computed(() => {
+  const driverMap = new Map();
+
+  // 1. Masukkan pengguna terdaftar dari database / settings
+  if (Array.isArray(props.users)) {
+    props.users.forEach(u => {
+      driverMap.set(u.name, {
+        id: u.id,
+        name: u.name,
+        department: u.department || 'Operasional',
+        role: u.role || 'Pengemudi',
+        avatarColor: u.avatarColor || '#10b981',
+        count: 0,
+        totalRp: 0,
+        totalLiters: 0
+      });
+    });
+  }
+
+  // 2. Hitung jumlah struk dan total uang per pengemudi berdasarkan data riil nota
+  if (Array.isArray(props.receipts)) {
+    props.receipts.forEach(r => {
+      const name = r.employeeName || 'Umum';
+      if (!driverMap.has(name)) {
+        driverMap.set(name, {
+          id: `driver_${name}`,
+          name,
+          department: r.department || 'Operasional',
+          role: 'Pengemudi',
+          avatarColor: '#6366f1',
+          count: 0,
+          totalRp: 0,
+          totalLiters: 0
+        });
+      }
+      const entry = driverMap.get(name);
+      entry.count += 1;
+      entry.totalRp += (Number(r.totalPrice) || 0);
+      entry.totalLiters += (Number(r.volumeLiters) || 0);
+    });
+  }
+
+  return Array.from(driverMap.values());
+});
 
 // Date calculation helpers
 const todayStr = computed(() => {
@@ -74,7 +137,8 @@ const filteredReceipts = computed(() => {
       (r.date && r.date.includes(query));
 
     // User filter
-    const matchUser = selectedUserFilter.value === 'all' || r.employeeName === selectedUserFilter.value;
+    const matchUser = selectedUserFilter.value === 'all' || 
+      (r.employeeName && r.employeeName.trim().toLowerCase() === selectedUserFilter.value.trim().toLowerCase());
 
     // Fuel filter
     const matchFuel = selectedFuelFilter.value === 'all' || r.fuelType === selectedFuelFilter.value;
@@ -171,7 +235,12 @@ function getFuelBadgeColor(fuelName) {
         <div>
           <h2 class="history-title">Riwayat Pengisian & Nota Bensin</h2>
           <p class="history-subtitle">
-            Menampilkan {{ filteredReceipts.length }} struk 
+            <span v-if="selectedUserFilter === 'all'">
+              Menampilkan {{ filteredReceipts.length }} nota dari seluruh pengemudi
+            </span>
+            <span v-else>
+              Menampilkan {{ filteredReceipts.length }} nota hasil scan milik <strong>{{ selectedUserFilter }}</strong>
+            </span>
             <span v-if="filteredReceipts.length > 0" class="sub-highlight">
               • Total: {{ formatRupiah(filteredSummary.totalRp) }} ({{ formatNumber(filteredSummary.totalLiters) }} L)
             </span>
@@ -218,6 +287,45 @@ function getFuelBadgeColor(fuelName) {
       </div>
     </div>
 
+    <!-- Filter Cepat Berdasarkan Nama Pemilik Nota -->
+    <div class="driver-filter-bar">
+      <div class="driver-filter-header">
+        <div class="driver-filter-label">
+          <Users :size="15" class="text-emerald" />
+          <span>Pilih Nama Pemilik Nota:</span>
+        </div>
+        <span class="driver-filter-hint">Klik nama untuk melihat khusus hasil scan orang tersebut</span>
+      </div>
+
+      <div class="driver-filter-chips">
+        <button 
+          class="driver-bar-chip"
+          :class="{ active: selectedUserFilter === 'all' }"
+          @click="selectedUserFilter = 'all'"
+        >
+          <Users :size="14" />
+          <span class="chip-name">Semua Pengguna</span>
+          <span class="chip-badge">{{ receipts.length }}</span>
+        </button>
+
+        <button 
+          v-for="d in availableDrivers" 
+          :key="d.name"
+          class="driver-bar-chip"
+          :class="{ active: selectedUserFilter === d.name }"
+          @click="selectedUserFilter = d.name"
+        >
+          <span class="avatar-dot" :style="{ backgroundColor: d.avatarColor }">
+            {{ d.name.charAt(0) }}
+          </span>
+          <span class="chip-name">{{ d.name }}</span>
+          <span class="chip-badge" :class="{ 'has-count': d.count > 0 }">
+            {{ d.count }}
+          </span>
+        </button>
+      </div>
+    </div>
+
     <!-- Filter Toolbar -->
     <div class="filter-toolbar">
       <!-- Search Box -->
@@ -238,13 +346,13 @@ function getFuelBadgeColor(fuelName) {
         </button>
       </div>
 
-      <!-- Driver / User Filter -->
+      <!-- Driver / User Filter Dropdown -->
       <div class="filter-item">
         <label class="filter-mini-label"><User :size="13" /> Nama Pengguna:</label>
         <select v-model="selectedUserFilter" class="form-select filter-select">
           <option value="all">👤 Semua Nama Pengguna</option>
-          <option v-for="u in users" :key="u.id" :value="u.name">
-            👤 {{ u.name }}
+          <option v-for="u in availableDrivers" :key="u.name" :value="u.name">
+            👤 {{ u.name }} ({{ u.count }} nota)
           </option>
         </select>
       </div>
@@ -316,11 +424,18 @@ function getFuelBadgeColor(fuelName) {
     <!-- Empty State -->
     <div v-if="filteredReceipts.length === 0" class="empty-history">
       <AlertCircle :size="38" class="text-muted" />
-      <p class="empty-title">Tidak ada riwayat struk yang cocok</p>
-      <p class="empty-desc">Tidak ditemukan catatan untuk nama pengguna atau tanggal yang dipilih.</p>
-      <button v-if="hasActiveFilters" class="btn btn-secondary btn-sm mt-2" @click="resetFilters">
+      <p class="empty-title">
+        {{ selectedUserFilter === 'all' ? 'Belum Ada Riwayat Nota Bensin' : `Belum Ada Nota Untuk "${selectedUserFilter}"` }}
+      </p>
+      <p class="empty-desc">
+        {{ selectedUserFilter === 'all' 
+          ? 'Data riwayat kosong. Silakan pindai foto nota bensin melalui menu Pindai Nota.' 
+          : `Belum ada nota hasil scan yang disimpan atas nama ${selectedUserFilter}.` 
+        }}
+      </p>
+      <button v-if="selectedUserFilter !== 'all'" class="btn btn-secondary btn-sm mt-2" @click="selectedUserFilter = 'all'">
         <RotateCcw :size="14" />
-        <span>Tampilkan Semua Riwayat</span>
+        <span>Tampilkan Semua Nota</span>
       </button>
     </div>
 
@@ -335,7 +450,8 @@ function getFuelBadgeColor(fuelName) {
                 <Square v-else :size="16" class="text-muted" />
               </button>
             </th>
-            <th>Pengguna / Nama</th>
+            <th>Pemilik Nota</th>
+            <th class="text-center">Foto Nota</th>
             <th>Tanggal & Waktu</th>
             <th>Nama SPBU</th>
             <th>Jenis BBM</th>
@@ -368,6 +484,20 @@ function getFuelBadgeColor(fuelName) {
                   <span class="driver-cell-dept">{{ r.department || 'Operasional' }}</span>
                 </div>
               </div>
+            </td>
+
+            <!-- Thumbnail Foto Nota -->
+            <td class="text-center td-receipt-img">
+              <button 
+                v-if="r.imageUrl" 
+                class="thumb-img-btn" 
+                title="Klik untuk memperbesar foto nota asli"
+                @click="openReceiptImageModal(r)"
+              >
+                <img :src="r.imageUrl" alt="Nota" class="mini-thumb" />
+                <Eye :size="11" class="thumb-eye-icon" />
+              </button>
+              <span v-else class="no-img-dash" title="Tidak ada lampiran foto">-</span>
             </td>
 
             <!-- Date -->
@@ -409,7 +539,7 @@ function getFuelBadgeColor(fuelName) {
               <div class="action-btn-group">
                 <button 
                   class="action-icon-btn edit" 
-                  title="Lihat / Edit Nota"
+                  title="Buka & Edit Nota di Form"
                   @click="$emit('edit-receipt', r)"
                 >
                   <Edit :size="15" />
@@ -426,6 +556,24 @@ function getFuelBadgeColor(fuelName) {
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Modal Preview Foto Nota Asli -->
+    <div v-if="previewModalImage" class="modal-backdrop" @click.self="closeReceiptImageModal">
+      <div class="modal-preview-box glass-panel">
+        <div class="modal-preview-header">
+          <div class="preview-header-left">
+            <ImageIcon :size="18" class="text-emerald" />
+            <span class="preview-title">{{ previewModalTitle }}</span>
+          </div>
+          <button class="modal-close-btn" @click="closeReceiptImageModal">
+            <X :size="18" />
+          </button>
+        </div>
+        <div class="modal-preview-body">
+          <img :src="previewModalImage" alt="Foto Nota Asli" class="full-preview-img" />
+        </div>
+      </div>
     </div>
 
     <!-- Modal Export PDF per Orang -->
@@ -493,18 +641,18 @@ function getFuelBadgeColor(fuelName) {
 }
 
 .export-pdf-btn {
-  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  background: #0f172a;
   color: #ffffff;
-  border: 1px solid #059669;
+  border: 1px solid #0f172a;
   font-weight: 600;
-  box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
-  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease;
 }
 
 .export-pdf-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+  background: #1e293b;
+  border-color: #1e293b;
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
 }
 
 .export-pdf-btn:disabled {
@@ -524,6 +672,243 @@ function getFuelBadgeColor(fuelName) {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Driver / Owner Filter Bar */
+.driver-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #ffffff;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.driver-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.driver-filter-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.driver-filter-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.driver-filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.driver-bar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.driver-bar-chip:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+  transform: translateY(-1px);
+}
+
+.driver-bar-chip.active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.avatar-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chip-name {
+  white-space: nowrap;
+}
+
+.chip-badge {
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+}
+
+.driver-bar-chip.active .chip-badge {
+  background: #334155;
+  color: #ffffff;
+}
+
+.chip-badge.has-count {
+  background: #10b981;
+  color: #ffffff;
+}
+
+/* Receipt Image Thumbnail in Table */
+.td-receipt-img {
+  width: 60px;
+}
+
+.thumb-img-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-color);
+  background: #f8fafc;
+  padding: 2px;
+  cursor: pointer;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.thumb-img-btn:hover {
+  border-color: #10b981;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+  transform: scale(1.05);
+}
+
+.mini-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.thumb-eye-icon {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #ffffff;
+  border-radius: 2px;
+  padding: 1px;
+}
+
+.no-img-dash {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Modal Preview Box */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-preview-box {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  max-width: 680px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.modal-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+  background: #f8fafc;
+}
+
+.preview-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.modal-preview-body {
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f172a;
+}
+
+.full-preview-img {
+  max-width: 100%;
+  max-height: 75vh;
+  object-fit: contain;
+  border-radius: var(--radius-xs);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Filter Toolbar */
