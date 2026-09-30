@@ -91,14 +91,8 @@ const priceDateLabel = computed(() => {
         </button>
       </nav>
 
-      <!-- Right: Database Status, Driver Profile & Settings -->
+      <!-- Right: Driver Profile & Settings -->
       <div class="header-actions">
-        <!-- Live Database Indicator -->
-        <div class="db-status-pill" title="Terhubung langsung ke MySQL database 'scanota'">
-          <span class="status-dot"></span>
-          <span class="db-text">MySQL scanota</span>
-        </div>
-
         <!-- Driver Profile Switcher Pill -->
         <button 
           class="driver-profile-pill"
@@ -263,26 +257,6 @@ const priceDateLabel = computed(() => {
   gap: 8px;
 }
 
-.db-status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  background: #f8fafc;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: #475569;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #10b981;
-}
-
 .driver-profile-pill {
   display: inline-flex;
   align-items: center;
@@ -377,7 +351,7 @@ const priceDateLabel = computed(() => {
 }
 
 @media (max-width: 900px) {
-  .db-status-pill, .brand-sub {
+  .brand-sub {
     display: none;
   }
 }
